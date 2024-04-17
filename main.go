@@ -9,10 +9,13 @@ import (
 	"github.com/urfave/cli"
 )
 
+//Command: [docker run --name k3s_default -e K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml --publish 6443:6443 --privileged -d rancher/k3s:v1.29.4-rc1-k3s1 server --https-listen-port 6443]
 func createCluster(c *cli.Context) error {
 	port := fmt.Sprintf("%s:%s", c.String("port"), c.String("port"))
 	image := fmt.Sprintf("rancher/k3s:%s", c.String("version"))
 	cmd := "docker"
+
+	//required arguments
 	args := []string{
 		"run",
 		"--name", c.String("name"),
@@ -20,20 +23,23 @@ func createCluster(c *cli.Context) error {
 		"--publish", port,
 		"--privileged",
 	}
+
+	//slice of string for any extra argument
 	extraArgs := []string{}
+
+	//check volume specific or not. append the extra argument --volume
 	if c.IsSet("volume") {
-		extraArgs = append(extraArgs, fmt.Sprintf("--volume %s", c.String("volume")))
+		//extraArgs = append(extraArgs, fmt.Sprintf("--volume %s", c.String("volume")))
+		extraArgs = append(extraArgs, "--volume", c.String("volume"))
 	}
 	if len(extraArgs) > 0 {
-		for _, extra := range extraArgs {
-			args = append(args, extra)
-		}
+		args = append(args, extraArgs...)
 	}
 	args = append(args,
 		"-d",
 		image,
-		"server",                                // cmd
-		"--https-listen-port", c.String("port"), //args
+		"server",                                
+		"--https-listen-port", c.String("port"),
 	)
 	log.Printf("Creating cluster [%s]", c.String("name"))
 	log.Printf("Running command: %+v", exec.Command(cmd, args...).Args)
@@ -45,19 +51,31 @@ func createCluster(c *cli.Context) error {
 	return nil
 }
 
+//Command: docker rm -f Cluster_name
 func deleteCluster(c *cli.Context) error {
 	cmd := "docker"
-	args := []string{"rm", "-f", c.String("name")}
+	args := []string{"rm", c.String("name")}
+
 	log.Printf("Deleting cluster [%s]", c.String("name"))
 	log.Printf("Running command: %+v", exec.Command(cmd, args...).Args)
+
 	if err := exec.Command(cmd, args...).Run(); err != nil {
-		log.Fatalf("FAILURE: couldn't delete cluster [%s] Err: %+v", c.String("name"), err)
-		return err
+		log.Printf("WARNING: couldn't delete cluster [%s], trying a force remove now.", c.String("name"))
+
+		//adding -f flag to delete the cluster forcefully
+		args = append(args, "-f")
+		log.Printf("Running command: %+v", exec.Command(cmd, args...).Args)
+
+		if err := exec.Command(cmd, args...).Run(); err != nil {
+			log.Fatalf("FAILURE: couldn't delete cluster [%s] Err: %+v", c.String("name"), err)
+			return err
+		}
 	}
 	log.Printf("SUCCESS: deleted cluster [%s]", c.String("name"))
 	return nil
 }
 
+//Command: docker stop Cluster_name
 func stopCluster(c *cli.Context) error {
 	cmd := "docker"
 	args := []string{"stop", c.String("name")}
@@ -71,6 +89,7 @@ func stopCluster(c *cli.Context) error {
 	return nil
 }
 
+//Command: docker start Cluster_name
 func startCluster(c *cli.Context) error {
 	cmd := "docker"
 	args := []string{"start", c.String("name")}
@@ -90,12 +109,18 @@ func listClusters(c *cli.Context) error {
 }
 
 func getConfig(c *cli.Context) error {
+	//path
 	sourcePath := fmt.Sprintf("%s:/output/kubeconfig.yaml", c.String("name"))
 	destPath := fmt.Sprintf("./kubeconfig-%s.yaml", c.String("name"))
+
+	//command: docker cp
 	cmd := "docker"
 	args := []string{"cp", sourcePath, destPath}
 	log.Printf("Grabbing kubeconfig for cluster [%s]", c.String("name"))
 	log.Printf("Running command: %+v", exec.Command(cmd, args...).Args)
+	//exec.Command(cmd, args...).Args will return --> []string{"docker", "cp", "sourcePath", "destPath"}
+
+	//executing command run()
 	if err := exec.Command(cmd, args...).Run(); err != nil {
 		log.Fatalf("FAILURE: couldn't get kubeconfig for cluster [%s] Err: %+v", c.String("name"), err)
 		return err
@@ -111,17 +136,18 @@ func main() {
 	var volume string
 	var k3sVersion string
 
-	app := cli.NewApp()
+	app := cli.NewApp() //creaing a command line application
+
+	//attributes
 	app.Name = "k3d"
 	app.Usage = "Run k3s in Docker!"
-	app.Version = "v1.29.4-rc1-k3s1"
+	app.Version = "v0.0.1"
 	app.Authors = []cli.Author{
 		cli.Author{
-			Name:  "iwilltry42",
-			Email: "iwilltry42@gmail.com",
+			Name:  "Yasin",
+			Email: "yasinarafat9889@gmail.com",
 		},
 	}
-
 	app.Commands = []cli.Command{
 		{
 			Name:    "check-tools",
@@ -196,10 +222,11 @@ func main() {
 					Destination: &clusterName,
 				},
 			},
-			Action: func(c *cli.Context) error {
-				fmt.Println("Stopping cluster")
-				return nil
-			},
+			// Action: func(c *cli.Context) error {
+			// 	fmt.Println("Stopping cluster")
+			// 	return nil
+			// },
+			Action: stopCluster,
 		},
 		{
 			Name:  "start",
@@ -212,10 +239,11 @@ func main() {
 					Destination: &clusterName,
 				},
 			},
-			Action: func(c *cli.Context) error {
-				fmt.Println("Starting stopped cluster")
-				return nil
-			},
+			// Action: func(c *cli.Context) error {
+			// 	fmt.Println("Starting stopped cluster")
+			// 	return nil
+			// },
+			Action: startCluster,
 		},
 		{
 			Name:  "list",
