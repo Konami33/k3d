@@ -1,12 +1,14 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"os"
 	"path"
 
+	dockerClient "github.com/docker/docker/client"
 	"github.com/mitchellh/go-homedir"
+	"github.com/olekukonko/tablewriter"
 )
 
 // createDirIfNotExists checks for the existence of a directory and creates it along with all required parents if not.
@@ -17,6 +19,7 @@ func createDirIfNotExists(path string) error {
 	}
 	return nil
 }
+
 // createClusterDir creates a directory with the cluster name under $HOME/.config/k3d/<cluster_name>.
 // The cluster directory will be used e.g. to store the kubeconfig file.
 func createClusterDir(name string) {
@@ -47,16 +50,33 @@ func getClusterDir(name string) (string, error) {
 }
 
 // printClusters prints the names of existing clusters
-func printClusters() {
+func printClusters(all bool) {
 	clusters, err := getClusters()
 	if err != nil {
 		log.Fatalf("ERROR: Couldn't list clusters -> %+v", err)
 	}
-	fmt.Println("NAME")
-	// TODO: user docker client to get state of cluster
-	for _, cluster := range clusters {
-		fmt.Println(cluster)
+	// Get the docker client. Used to interact with docker to get information about containers
+	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
+	if err != nil {
+		log.Printf("WARNING: couldn't get docker info -> %+v", err)
 	}
+	// Create a new table
+	table := tablewriter.NewWriter(os.Stdout)
+	// Set the table header
+	table.SetHeader([]string{"NAME", "IMAGE", "STATUS"})
+	// Iterate over the clusters and print the name, image and status
+	for _, cluster := range clusters {
+		// Get the container info
+		containerInfo, _ := docker.ContainerInspect(context.Background(), cluster)
+		// Add the cluster to the table
+		clusterData := []string{cluster, containerInfo.Config.Image, containerInfo.ContainerJSONBase.State.Status}
+		// If all is true, print all clusters, otherwise only print running clusters
+		if containerInfo.ContainerJSONBase.State.Status == "running" || all {
+			table.Append(clusterData)
+		}
+	}
+	// Print the table
+	table.Render()
 }
 
 // getClusters returns a list of cluster names which are folder names in the config directory

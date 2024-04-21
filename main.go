@@ -111,7 +111,7 @@ func startCluster(c *cli.Context) error {
 func listClusters(c *cli.Context) error {
 	fmt.Println("TEST list")
 	//listing all the cluster directories
-	printClusters()
+	printClusters(c.Bool("all"))
 	return nil
 }
 
@@ -135,12 +135,6 @@ func getKubeConfig(c *cli.Context) error {
 }
 
 func main() {
-
-	// var clusterName string
-	// var serverPort int
-	// var volume string
-	// var k3sVersion string
-
 	app := cli.NewApp() //creating a command line application
 
 	//attributes
