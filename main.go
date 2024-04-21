@@ -140,7 +140,7 @@ func main() {
 	//attributes
 	app.Name = "k3d"
 	app.Usage = "Run k3s in Docker!"
-	app.Version = "v0.0.2"
+	app.Version = "v0.1.1"
 	app.Authors = []cli.Author{
 		cli.Author{
 			Name:  "Yasin",
@@ -202,6 +202,10 @@ func main() {
 					Value: "k3s_default",
 					Usage: "name of the cluster",
 				},
+				cli.BoolFlag{
+					Name:  "all, a",
+					Usage: "delete all existing clusters (this ignores the --name/-n flag)",
+				},
 			},
 			Action: deleteCluster,
 		},
@@ -215,10 +219,6 @@ func main() {
 					Usage: "name of the cluster",
 				},
 			},
-			// Action: func(c *cli.Context) error {
-			// 	fmt.Println("Stopping cluster")
-			// 	return nil
-			// },
 			Action: stopCluster,
 		},
 		{
@@ -230,12 +230,23 @@ func main() {
 					Value: "k3s_default",
 					Usage: "name of the cluster",
 				},
+				cli.BoolFlag{
+					Name:  "all, a",
+					Usage: "start all stopped clusters (this ignores the --name/-n flag)",
+				},
 			},
 			Action: startCluster,
 		},
 		{
 			Name:   "list",
+			Aliases: []string{"ls", "l"},
 			Usage:  "List all clusters",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "all, a",
+					Usage: "also show non-running clusters",
+				},
+			},
 			Action: listClusters,
 		},
 		{
@@ -246,6 +257,10 @@ func main() {
 					Name:  "name, n",
 					Value: "k3s_default",
 					Usage: "name of the cluster",
+				},
+				cli.BoolFlag{
+					Name:  "all, a",
+					Usage: "get kubeconfig for all clusters (this ignores the --name/-n flag)",
 				},
 			},
 			Action: getKubeConfig,
