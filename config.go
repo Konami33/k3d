@@ -11,6 +11,12 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
+type cluster struct {
+	name   string
+	image  string
+	status string
+}
+
 // createDirIfNotExists checks for the existence of a directory and creates it along with all required parents if not.
 // It returns an error if the directory (or parents) couldn't be created and nil if it worked fine or if the path already exists.
 func createDirIfNotExists(path string) error {
@@ -51,36 +57,32 @@ func getClusterDir(name string) (string, error) {
 
 // printClusters prints the names of existing clusters
 func printClusters(all bool) {
-	clusters, err := getClusters()
+	clusterNames, err := getClusterNames()
 	if err != nil {
 		log.Fatalf("ERROR: Couldn't list clusters -> %+v", err)
 	}
-	// Get the docker client. Used to interact with docker to get information about containers
-	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
-	if err != nil {
-		log.Printf("WARNING: couldn't get docker info -> %+v", err)
+	if len(clusterNames) == 0 {
+		log.Printf("No clusters found")
+		return
 	}
+
 	// Create a new table
 	table := tablewriter.NewWriter(os.Stdout)
 	// Set the table header
 	table.SetHeader([]string{"NAME", "IMAGE", "STATUS"})
-	// Iterate over the clusters and print the name, image and status
-	for _, cluster := range clusters {
-		// Get the container info
-		containerInfo, _ := docker.ContainerInspect(context.Background(), cluster)
-		// Add the cluster to the table
-		clusterData := []string{cluster, containerInfo.Config.Image, containerInfo.ContainerJSONBase.State.Status}
-		// If all is true, print all clusters, otherwise only print running clusters
-		if containerInfo.ContainerJSONBase.State.Status == "running" || all {
+
+	for _, clusterName := range clusterNames {
+		cluster, _ := getCluster(clusterName)
+		clusterData := []string{cluster.name, cluster.image, cluster.status}
+		if cluster.status == "running" || all {
 			table.Append(clusterData)
 		}
 	}
-	// Print the table
 	table.Render()
 }
 
 // getClusters returns a list of cluster names which are folder names in the config directory
-func getClusters() ([]string, error) {
+func getClusterNames() ([]string, error) {
 	homeDir, err := homedir.Dir()
 	if err != nil {
 		log.Printf("ERROR: Couldn't get user's home directory")
@@ -100,4 +102,31 @@ func getClusters() ([]string, error) {
 		}
 	}
 	return clusters, nil
+}
+
+// returns information about a specific cluster
+// takes cluster name as input and returns cluster struct containing details(name, image, status)
+// if any error occcured, returns error
+func getCluster(name string) (cluster, error) {
+	//initalize cluster with default value
+	cluster := cluster{
+		name:   name,
+		image:  "UNKNOWN",
+		status: "UNKNOWN",
+	}
+	//docker client
+	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
+	if err != nil {
+		log.Printf("WARNING: couldn't create docker client -> %+v", err)
+	}
+	//getting the container info using dockerclient
+	containerInfo, err := docker.ContainerInspect(context.Background(), cluster.name)
+	if err != nil {
+		log.Printf("WARNING: couldn't get docker info for [%s] -> %+v", cluster.name, err)
+	} else {
+		//update cluster details
+		cluster.image = containerInfo.Config.Image
+		cluster.status = containerInfo.ContainerJSONBase.State.Status
+	}
+	return cluster, nil
 }
