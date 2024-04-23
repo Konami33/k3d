@@ -2,10 +2,14 @@ package run
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path"
+	"strconv"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	dockerClient "github.com/docker/docker/client"
 	"github.com/mitchellh/go-homedir"
 	"github.com/olekukonko/tablewriter"
@@ -15,6 +19,8 @@ type cluster struct {
 	name   string
 	image  string
 	status string
+	ports  []string //slice of string. Can holde multiple string value
+	id     string
 }
 
 // createDirIfNotExists checks for the existence of a directory and creates it along with all required parents if not.
@@ -63,7 +69,7 @@ func printClusters(all bool) {
 		log.Printf("No clusters found!")
 		return
 	}
-	
+
 	//creating a table output with header name, image, status
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"NAME", "IMAGE", "STATUS"})
@@ -109,20 +115,39 @@ func getCluster(name string) (cluster, error) {
 		name:   name,
 		image:  "UNKNOWN",
 		status: "UNKNOWN",
+		ports:  []string{"UNKNOWN"},
+		id:     "UNKNOWN",
 	}
+
+	ctx := context.Background()
+
 	//docker client
 	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
 	if err != nil {
 		log.Printf("WARNING: couldn't create docker client -> %+v", err)
+		return cluster, err
 	}
-	//getting the container info using dockerclient
-	containerInfo, err := docker.ContainerInspect(context.Background(), cluster.name)
+
+	filters := filters.NewArgs()
+	filters.Add("label", "app=k3d")
+	filters.Add("label", fmt.Sprintf("cluster=%s", cluster.name))
+	filters.Add("label", "component=server")
+
+	// container.Listoptions will work
+	// ContainerList returns the list of containers in the docker host.
+	containerList, err := docker.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filters,
+	})
 	if err != nil {
-		log.Printf("WARNING: couldn't get docker info for [%s] -> %+v", cluster.name, err)
-	} else {
-		//update cluster details
-		cluster.image = containerInfo.Config.Image
-		cluster.status = containerInfo.ContainerJSONBase.State.Status
+		return cluster, fmt.Errorf("WARNING: couldn't get docker info for [%s] -> %+v", cluster.name, err)
 	}
+	container := containerList[0]
+	cluster.image = container.Image
+	cluster.status = container.State
+	for _, port := range container.Ports {
+		cluster.ports = append(cluster.ports, strconv.Itoa(int(port.PublicPort)))
+	}
+	cluster.id = container.ID
 	return cluster, nil
 }

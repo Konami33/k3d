@@ -1,0 +1,10 @@
+Context:
+    1. context Package: The context package provides a way to propagate deadlines, cancelation signals, and other request-scoped values across API boundaries and between goroutines. It is commonly used to manage the lifetime of operations and handle timeouts, cancelations, and deadlines gracefully.
+        a. Deadline: A deadline is a point in time until which an operation should complete. If the operation exceeds the deadline, it can be canceled.
+        b. Cancelation Signal: A cancelation signal indicates that the operation should be canceled. It allows propagating the cancelation signal through the context tree to notify all relevant operations to terminate.
+
+    2. context.Background(): This function returns a non-nil, empty Context object. It's typically used as the parent context for all other contexts within an application. The background context is a special context that serves as the root of the context tree. It is never canceled, has no values associated with it, and is mainly used as a starting point for creating other contexts.
+FromEnv Function: 
+    FromEnv is a function provided by the dockerClient package. It is used to create a new Docker client by initializing it with options obtained from environment variables. When called, it configures the client to use default settings based on environment variables such as DOCKER_HOST, DOCKER_TLS_VERIFY, and DOCKER_CERT_PATH.
+    FromEnv reads the Docker environment variables and sets up the Docker client accordingly.
+    It automatically configures the client to communicate with the Docker Engine running on the local machine or a remote machine, depending on the environment variables.
