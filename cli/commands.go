@@ -116,46 +116,97 @@ kubectl cluster-info`, os.Args[0], c.String("name"))
 // DeleteCluster removes the cluster container and its cluster directory
 func DeleteCluster(c *cli.Context) error {
 	cmd := "docker"
-	args := []string{"rm", c.String("name")}
-	log.Printf("Deleting cluster [%s]", c.String("name"))
-	if err := runCommand(true, cmd, args...); err != nil {
-		log.Printf("WARNING: couldn't delete cluster [%s], trying a force remove now.", c.String("name"))
-		// force remove the container by appending the -f flag to the rm command
-		args = append(args, "-f")
-		if err := runCommand(true, cmd, args...); err != nil {
-			log.Fatalf("FAILURE: couldn't delete cluster [%s] -> %+v", c.String("name"), err)
-			return err
+	args := []string{"rm"}
+	clusters := []string{}
+
+	// if `--all` is specified, get all the cluster names, otherwise only the specified one
+	if !c.Bool("all") {
+		clusters = append(clusters, c.String("name"))
+	} else {
+		clusterList, err := getClusterNames()
+		if err != nil {
+			log.Fatalf("ERROR: `--all` specified, but no clusters were found.")
 		}
+		clusters = append(clusters, clusterList...)
 	}
-	//deleting the directory of that cluster
-	deleteClusterDir(c.String("name"))
-	log.Printf("SUCCESS: deleted cluster [%s]", c.String("name"))
+
+	for _, cluster := range clusters {
+		log.Printf("Deleting cluster [%s]", cluster)
+		args = append(args, cluster)
+		if err := runCommand(true, cmd, args...); err != nil {
+			log.Printf("WARNING: couldn't delete cluster [%s], trying a force remove now.", cluster)
+			args = args[:len(args)-1]
+			args = append(args, "-f", cluster)
+			if err := runCommand(true, cmd, args...); err != nil {
+				log.Printf("FAILURE: couldn't delete cluster [%s] -> %+v", cluster, err)
+			}
+			//pop the last element. (cluster_name)
+			args = args[:len(args)-1]
+		}
+		//also delete the cluster directory
+		deleteClusterDir(cluster)
+		log.Printf("SUCCESS: removed cluster [%s]", cluster)
+		//pop the last element "-f"
+		args = args[:len(args)-1]
+	}
 	return nil
 }
 
 // StopCluster stops a running cluster container (restartable)
 func StopCluster(c *cli.Context) error {
 	cmd := "docker"
-	args := []string{"stop", c.String("name")}
-	log.Printf("Stopping cluster [%s]", c.String("name"))
-	if err := runCommand(true, cmd, args...); err != nil {
-		log.Fatalf("FAILURE: couldn't stop cluster [%s] -> %+v", c.String("name"), err)
-		return err
+	args := []string{"stop"}
+	clusters := []string{}
+
+	//handle the -all flag
+	if !c.Bool("all") {
+		clusters = append(clusters, c.String("name"))
+	} else {
+		clusterList, err := getClusterNames()
+		if err != nil {
+			log.Fatalf("ERROR: `--all` flag specified, but no clusters were found")
+		}
+		clusters = append(clusters, clusterList...)
 	}
-	log.Printf("SUCCESS: stopped cluster [%s]", c.String("name"))
+
+	// iterate over the cluster and stop one by one
+	for _, cluster := range clusters {
+		log.Printf("Stopping cluster [%s]", cluster)
+		args = append(args, cluster)
+		if err := runCommand(true, cmd, args...); err != nil {
+			log.Printf("FAILURE: couldn't stop cluster [%s] -> %+v", cluster, err)
+		}
+		log.Printf("SUCCESS: stopped cluster [%s]", cluster)
+		args = args[:len(args)-1]
+	}
 	return nil
 }
 
 // StartCluster starts a stopped cluster container
 func StartCluster(c *cli.Context) error {
 	cmd := "docker"
-	args := []string{"start", c.String("name")}
-	log.Printf("Starting cluster [%s]", c.String("name"))
-	if err := runCommand(true, cmd, args...); err != nil {
-		log.Fatalf("FAILURE: couldn't start cluster [%s] -> %+v", c.String("name"), err)
-		return err
+	args := []string{"start"}
+	clusters := []string{}
+
+	if !c.Bool("all") {
+		clusters = append(clusters, c.String("name"))
+	} else {
+		clusterList, err := getClusterNames()
+		if err != nil {
+			log.Fatalf("ERROR: `--all` specified, but no clusters were found.")
+		}
+		clusters = append(clusters, clusterList...)
 	}
-	log.Printf("SUCCESS: started cluster [%s]", c.String("name"))
+
+	for _, cluster := range clusters {
+		log.Printf("Stopping cluster [%s]", cluster)
+		args = append(args, cluster)
+		if err := runCommand(true, cmd, args...); err != nil {
+			log.Printf("FAILURE: couldn't stop cluster [%s] -> %+v", cluster, err)
+		}
+		log.Printf("SUCCESS: started cluster [%s]", c.String("name"))
+		args = args[:len(args)-1]
+	}
 	return nil
 }
 
@@ -167,6 +218,7 @@ func ListClusters(c *cli.Context) error {
 
 // GetKubeConfig grabs the kubeconfig from the running cluster and prints the path to stdout
 func GetKubeConfig(c *cli.Context) error {
+	//getting the source path and dest path or directory
 	sourcePath := fmt.Sprintf("%s:/output/kubeconfig.yaml", c.String("name"))
 	destPath, _ := getClusterDir(c.String("name"))
 	cmd := "docker"
