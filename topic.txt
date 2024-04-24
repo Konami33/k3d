@@ -8,3 +8,5 @@ FromEnv Function:
     FromEnv is a function provided by the dockerClient package. It is used to create a new Docker client by initializing it with options obtained from environment variables. When called, it configures the client to use default settings based on environment variables such as DOCKER_HOST, DOCKER_TLS_VERIFY, and DOCKER_CERT_PATH.
     FromEnv reads the Docker environment variables and sets up the Docker client accordingly.
     It automatically configures the client to communicate with the Docker Engine running on the local machine or a remote machine, depending on the environment variables.
+Why tmpfs are Needed: 
+    Mounting /run and /var/run as tmpfs can be beneficial for containerized applications that rely on runtime data or need to write temporary files. Using tmpfs for these directories can improve performance and reduce wear on disk storage, especially in environments where container disk storage is limited or where disk I/O performance is critical. Additionally, tmpfs mounts are automatically cleaned up when the container exits, helping to keep the filesystem clean.

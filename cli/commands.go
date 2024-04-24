@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ func CheckTools(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	// Ping pings the server and returns the value of the "Docker-Experimental", "Builder-Version", "OS-Type" & "API-Version" headers.
 	ping, err := docker.Ping(ctx)
 	if err != nil {
 		return fmt.Errorf("ERROR: checking docker failed\n%+v", err)
@@ -40,6 +42,20 @@ func CreateCluster(c *cli.Context) error {
 	if c.IsSet("timeout") && !c.IsSet("wait") {
 		return errors.New("can not use --timeout flag without --wait flag")
 	}
+
+	// environment variables
+	env := []string{"K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml"}
+	if c.IsSet("env") || c.IsSet("e") {
+		env = append(env, c.StringSlice("env")...)
+	}
+
+	k3sClusterSecret := ""
+	//if worker node is set
+	if c.Int("workers") > 0 {
+		k3sClusterSecret = fmt.Sprintf("K3S_CLUSTER_SECRET=%s", GenerateRandomString(20))
+		env = append(env, k3sClusterSecret)
+	}
+
 	// constructs the arguments to be passed to the k3s server
 	k3sServerArgs := []string{"--https-listen-port", c.String("port")}
 	if c.IsSet("server-arg") || c.IsSet("x") {
@@ -57,7 +73,7 @@ func CreateCluster(c *cli.Context) error {
 		fmt.Sprintf("docker.io/rancher/k3s:%s", c.String("version")),
 		c.String("port"),
 		k3sServerArgs,
-		[]string{"K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml"},
+		env,
 		c.String("name"),
 		strings.Split(c.String("volume"), ","), //value: "dir1:mount1,dir2:mount2" --> []string{"dir1:mount1", "dir2:mount2"}
 	)
@@ -121,45 +137,76 @@ func CreateCluster(c *cli.Context) error {
 
 export KUBECONFIG="$(%s get-kubeconfig --name='%s')"
 kubectl cluster-info`, os.Args[0], c.String("name"))
+
+	// creting the specified worker nodes
+	if c.Int("workers") > 0 {
+		k3sWorkerArgs := []string{}
+		env := []string{k3sClusterSecret}
+		log.Printf("Booting %s workers for cluster %s", strconv.Itoa(c.Int("workers")), c.String("name"))
+		for i := 0; i < c.Int("workers"); i++ {
+			workerID, err := createWorker(
+				c.GlobalBool("verbose"),
+				fmt.Sprintf("docker.io/rancher/k3s:%s", c.String("version")),
+				k3sWorkerArgs,
+				env,
+				c.String("name"),
+				strings.Split(c.String("volume"), ","),
+				strconv.Itoa(i),
+				c.String("port"),
+			)
+			if err != nil {
+				return fmt.Errorf("ERROR: failed to create worker node for cluster %s\n%+v", c.String("name"), err)
+			}
+			fmt.Printf("Created worker with ID %s\n", workerID)
+		}
+	}
+
 	return nil
 }
 
 // DeleteCluster removes the cluster container and its cluster directory
 func DeleteCluster(c *cli.Context) error {
-	ctx := context.Background()
-	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
-	if err != nil {
-		return err
+	//creating cluster map name-->cluster struct
+	clusters := make(map[string]cluster)
+	// if not all get specified cluster
+	if !c.Bool("all") {
+		cluster, err := getCluster(c.String("name"))
+		if err != nil {
+			return err
+		}
+		clusters[c.String("name")] = cluster
+	} else {
+		clusterMap, err := getClusters()
+		if err != nil {
+			return fmt.Errorf("ERROR: `--all` specified, but no clusters were found\n%+v", err)
+		}
+		// copy clusterMap into the clusters
+		for k, v := range clusterMap {
+			clusters[k] = v
+		}
 	}
 
-	clusterNames := []string{}
-	// if `--all` is specified, get all the cluster names, otherwise only the specified one
-	if !c.Bool("all") {
-		clusterNames = append(clusterNames, c.String("name"))
-	} else {
-		clusterList, err := getClusterNames()
-		if err != nil {
-			return fmt.Errorf("ERROR: `--all` specified, but no clusters were found\n%v", err)
+	for _, cluster := range clusters {
+		log.Printf("Removing cluster [%s]", cluster.name)
+		// first delete workder node
+		if len(cluster.workers) > 0 {
+			log.Printf("...Removing %d workers\n", len(cluster.workers))
+			// iterate over all the worker node and delete each one
+			for _, worker := range cluster.workers {
+				//removeContainer defined in container.go used to deleteContianer
+				if err := removeContainer(worker.ID); err != nil {
+					log.Println(err)
+					continue
+				}
+			}
 		}
-		clusterNames = append(clusterNames, clusterList...)
-	}
-	// delete each cluster by iterating over the list of cluster names
-	for _, name := range clusterNames {
-		log.Printf("Deleting cluster [%s]", name)
-		// get the cluster info
-		cluster, err := getCluster(name)
-		if err != nil {
-			log.Printf("WARNING: couldn't get docker info for %s", name)
-			continue
-		}
-		log.Printf("WARNING: couldn't delete cluster [%s], trying a force remove now.", cluster.name)
-		// ContainerRemove kills and removes a container from the docker host.
-		if err := docker.ContainerRemove(ctx, cluster.id, container.RemoveOptions{Force: true});
-		err != nil {
-			log.Printf("FAILURE: couldn't delete cluster container for [%s] -> %+v", cluster.name, err)
-		}
-		// deleting the cluster directory
+		//now remove the k3d server
+		log.Println("...Removing server")
+		//directory
 		deleteClusterDir(cluster.name)
+		if err := removeContainer(cluster.server.ID); err != nil {
+			return fmt.Errorf("ERROR: Couldn't remove server for cluster %s\n%+v", cluster.name, err)
+		}
 		log.Printf("SUCCESS: removed cluster [%s]", cluster.name)
 	}
 	return nil
@@ -172,7 +219,7 @@ func StopCluster(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	
+
 	clusterNames := []string{}
 
 	//handle the -all flag
@@ -194,7 +241,7 @@ func StopCluster(c *cli.Context) error {
 			log.Printf("WARNING: couldn't get docker info for %s", name)
 			continue
 		}
-		if err := docker.ContainerStop(ctx, cluster.id, container.StopOptions{}); err != nil {
+		if err := docker.ContainerStop(ctx, cluster.server.ID, container.StopOptions{}); err != nil {
 			fmt.Printf("WARNING: couldn't stop cluster %s\n%+v", cluster.name, err)
 			continue
 		}
@@ -230,7 +277,7 @@ func StartCluster(c *cli.Context) error {
 			log.Printf("WARNING: couldn't get docker info for %s", name)
 			continue
 		}
-		if err := docker.ContainerStart(ctx, cluster.id, container.StartOptions{}); err != nil {
+		if err := docker.ContainerStart(ctx, cluster.server.ID, container.StartOptions{}); err != nil {
 			fmt.Printf("WARNING: couldn't start cluster %s\n%+v", cluster.name, err)
 			continue
 		}
@@ -248,13 +295,13 @@ func ListClusters(c *cli.Context) error {
 // GetKubeConfig grabs the kubeconfig from the running cluster and prints the path to stdout
 func GetKubeConfig(c *cli.Context) error {
 	//getting the source path and dest path or directory
-	sourcePath := fmt.Sprintf("%s:/output/kubeconfig.yaml", c.String("name"))
+	sourcePath := fmt.Sprintf("k3d-%s-server:/output/kubeconfig.yaml", c.String("name"))
 	destPath, _ := getClusterDir(c.String("name"))
 	cmd := "docker"
 	args := []string{"cp", sourcePath, destPath}
 	// GlobalBool looks up the value of a global BoolFlag, returns false if not found
 	if err := runCommand(c.GlobalBool("verbose"), cmd, args...); err != nil {
-		return fmt.Errorf("ERROR: Couldn't get kubeconfig for cluster [%s]\n%+v", fmt.Sprintf("%s-server", c.String("name")), err)
+		return fmt.Errorf("ERROR: Couldn't get kubeconfig for cluster [%s]\n%+v", fmt.Sprintf("k3d-%s-server-server", c.String("name")), err)
 	}
 	fmt.Printf("%s\n", path.Join(destPath, "kubeconfig.yaml"))
 	return nil
