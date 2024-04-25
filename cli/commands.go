@@ -38,6 +38,14 @@ func CheckTools(c *cli.Context) error {
 
 // CreateCluster creates a new single-node cluster container and initializes the cluster directory
 func CreateCluster(c *cli.Context) error {
+
+	// create cluster network
+	networkID, err := createClusterNetwork(c.String("name"))
+	if err != nil {
+		return err
+	}
+	log.Printf("Created cluster network with ID %s", networkID)
+
 	// Check if the timeout flag is set but the wait flag is not, return an error if so
 	if c.IsSet("timeout") && !c.IsSet("wait") {
 		return errors.New("can not use --timeout flag without --wait flag")
@@ -69,7 +77,7 @@ func CreateCluster(c *cli.Context) error {
 	// dockerID is the ID of the container
 	// container.go -> createServer()
 	dockerID, err := createServer(
-		c.Bool("verbose"),
+		c.GlobalBool("verbose"),
 		fmt.Sprintf("docker.io/rancher/k3s:%s", c.String("version")),
 		c.String("port"),
 		k3sServerArgs,
@@ -207,6 +215,11 @@ func DeleteCluster(c *cli.Context) error {
 		if err := removeContainer(cluster.server.ID); err != nil {
 			return fmt.Errorf("ERROR: Couldn't remove server for cluster %s\n%+v", cluster.name, err)
 		}
+
+		if err := deleteClusterNetwork(cluster.name); err != nil {
+			log.Printf("WARNING: couldn't delete cluster network for cluster %s\n%+v", cluster.name, err)
+		}
+		
 		log.Printf("SUCCESS: removed cluster [%s]", cluster.name)
 	}
 	return nil

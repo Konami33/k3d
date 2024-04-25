@@ -55,6 +55,5 @@ func GenerateRandomString(n int) string {
 		cache >>= letterIdxBits
 		remain--
 	}
-
 	return sb.String()
 }

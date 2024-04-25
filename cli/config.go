@@ -142,18 +142,20 @@ func getClusters() (map[string]cluster, error) {
 	}
 
 	clusters := make(map[string]cluster)
+	// for worker node deleting the label "server" and adding "worker"
+	filters.Del("label", "component=server")
+	filters.Add("label", "component=worker")
+
 	for _, server := range k3dServers {
 		filters.Add("label", fmt.Sprintf("cluster=%s", server.Labels["cluster"]))
-		// for worker node deleting the label "server" and adding "worker"
-		filters.Del("label", "component=server")
-		filters.Add("label", "component=worker")
 		//getting the worker nodes of each k3d server
 		workers, err := docker.ContainerList(ctx, container.ListOptions{
 			All:     true,
 			Filters: filters,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("WARNING: couldn't list worker containers for cluster %s\n%+v", server.Labels["cluster"], err)
+			// return nil, fmt.Errorf("WARNING: couldn't list worker containers for cluster %s\n%+v", server.Labels["cluster"], err)
+			log.Printf("WARNING: couldn't get worker containers for cluster %s\n%+v", server.Labels["cluster"], err)
 		}
 		serverPorts := []string{}
 		for _, port := range server.Ports {
@@ -167,6 +169,8 @@ func getClusters() (map[string]cluster, error) {
 			server:      server,
 			workers:     workers,
 		}
+		// clear label filters before searching for next cluster
+		filters.Del("label", fmt.Sprintf("cluster=%s", server.Labels["cluster"]))
 	}
 	return clusters, nil
 }

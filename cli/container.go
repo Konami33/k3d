@@ -12,10 +12,12 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
 	dockerClient "github.com/docker/docker/client"
 )
 
 func createServer(verbose bool, image string, port string, args []string, env []string, name string, volumes []string) (string, error) {
+	log.Printf("Creating server using %s...\n", image)
 	ctx := context.Background()
 	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
 	if err != nil {
@@ -29,6 +31,11 @@ func createServer(verbose bool, image string, port string, args []string, env []
 	//problem
 	if verbose {
 		_, err := io.Copy(os.Stdout, reader) // TODO: only if verbose mode
+		if err != nil {
+			log.Printf("WARNING: couldn't get docker output\n%+v", err)
+		}
+	} else {
+		_, err := io.Copy(io.Discard, reader)
 		if err != nil {
 			log.Printf("WARNING: couldn't get docker output\n%+v", err)
 		}
@@ -46,6 +53,7 @@ func createServer(verbose bool, image string, port string, args []string, env []
 	// if port is 8080: it represens port 8080 with the TCP protocol.
 	containerPort := nat.Port(fmt.Sprintf("%s/tcp", port))
 
+	//host config
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
 			// Key = containerPort. Represents the port inside the container
@@ -64,6 +72,21 @@ func createServer(verbose bool, image string, port string, args []string, env []
 		hostConfig.Binds = volumes
 	}
 
+	//networkingConfig
+	// this specifies how the container interacts with Docker networks
+	networkingConfig := &network.NetworkingConfig{
+		// EndpointSettings stores the network endpoint details
+		// This is a map holds the network configuration for different endpoints.
+		// values are pointers to network.EndpointSettings structs.
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			// This is the key of the map, which represents the name of the network endpoint.
+			// Aliases: []string{containerName}: value associated with the name key. It's a pointer to a network.EndpointSettings struct. The Aliases field of this struct is set to an array containing a single string, which is containerName. This means that the endpoint identified by name will have an alias, and that alias is containerName.
+			name: {
+				Aliases: []string{containerName},
+			},
+		},
+	}
+
 	// problem
 	resp, err := docker.ContainerCreate(ctx, &container.Config{
 		Image: image,
@@ -73,7 +96,7 @@ func createServer(verbose bool, image string, port string, args []string, env []
 		},
 		Env:    env,
 		Labels: containerLabels,
-	}, hostConfig, nil, nil, containerName)
+	}, hostConfig, networkingConfig, nil, containerName)
 	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't create container %s\n%+v", containerName, err)
 	}
@@ -84,7 +107,7 @@ func createServer(verbose bool, image string, port string, args []string, env []
 	return resp.ID, nil
 }
 
-//creating worker node
+// creating worker node
 func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix string, serverPort string) (string, error) {
 	ctx := context.Background()
 	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
@@ -132,11 +155,19 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 		hostConfig.Binds = volumes
 	}
 
+	networkingConfig := &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			name: {
+				Aliases: []string{containerName},
+			},
+		},
+	}
+
 	resp, err := docker.ContainerCreate(ctx, &container.Config{
 		Image:  image,
 		Env:    env,
 		Labels: containerLabels,
-	}, hostConfig, nil, nil, containerName)
+	}, hostConfig, networkingConfig, nil, containerName)
 	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't create container %s\n%+v", containerName, err)
 	}
