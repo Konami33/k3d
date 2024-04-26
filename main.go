@@ -43,7 +43,8 @@ func main() {
 					Usage: "Mount one or more volumes into the cluster node (Docker notation: `source:destination[,source:destination]`",
 				},
 				cli.StringFlag{
-					Name:  "version",
+					Name: "version",
+					//TO DO: add a function to automatically get the latest version
 					Value: "v1.29.4-rc1-k3s1",
 					Usage: "Choose the k3s image version",
 				},

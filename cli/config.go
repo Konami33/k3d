@@ -96,26 +96,26 @@ func printClusters(all bool) {
 }
 
 // getClusterNames returns a list of cluster names which are folder names in the config directory
-func getClusterNames() ([]string, error) {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		log.Printf("ERROR: Couldn't get user's home directory")
-		return nil, err
-	}
-	configDir := path.Join(homeDir, ".config", "k3d")
-	files, err := os.ReadDir(configDir)
-	if err != nil {
-		log.Printf("ERROR: Couldn't list files in [%s]", configDir)
-		return nil, err
-	}
-	clusters := []string{}
-	for _, file := range files {
-		if file.IsDir() {
-			clusters = append(clusters, file.Name())
-		}
-	}
-	return clusters, nil
-}
+// func getClusterNames() ([]string, error) {
+// 	homeDir, err := homedir.Dir()
+// 	if err != nil {
+// 		log.Printf("ERROR: Couldn't get user's home directory")
+// 		return nil, err
+// 	}
+// 	configDir := path.Join(homeDir, ".config", "k3d")
+// 	files, err := os.ReadDir(configDir)
+// 	if err != nil {
+// 		log.Printf("ERROR: Couldn't list files in [%s]", configDir)
+// 		return nil, err
+// 	}
+// 	clusters := []string{}
+// 	for _, file := range files {
+// 		if file.IsDir() {
+// 			clusters = append(clusters, file.Name())
+// 		}
+// 	}
+// 	return clusters, nil
+// }
 
 // returns information about a specific cluster
 // takes cluster name as input and returns cluster struct containing details(name, image, status)
@@ -176,6 +176,8 @@ func getClusters() (map[string]cluster, error) {
 }
 // getCluster creates a cluster struct with populated information fields
 func getCluster(name string) (cluster, error) {
+	// get all clusters
 	clusters, err := getClusters()
+	//return the cluster with specified name
 	return clusters[name], err
 }
