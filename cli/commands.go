@@ -141,11 +141,6 @@ func CreateCluster(c *cli.Context) error {
 	}
 	// creating a cluster directory
 	createClusterDir(c.String("name"))
-	log.Printf("SUCCESS: created cluster [%s]", c.String("name"))
-	log.Printf(`You can now use the cluster with:
-
-export KUBECONFIG="$(%s get-kubeconfig --name='%s')"
-kubectl cluster-info`, os.Args[0], c.String("name"))
 
 	// creting the specified worker nodes
 	if c.Int("workers") > 0 {
@@ -169,6 +164,12 @@ kubectl cluster-info`, os.Args[0], c.String("name"))
 			fmt.Printf("Created worker with ID %s\n", workerID)
 		}
 	}
+	// after server and worker node creation showing this message
+	log.Printf("SUCCESS: created cluster [%s]", c.String("name"))
+	log.Printf(`You can now use the cluster with:
+
+export KUBECONFIG="$(%s get-kubeconfig --name='%s')"
+kubectl cluster-info`, os.Args[0], c.String("name"))
 
 	return nil
 }
@@ -355,12 +356,15 @@ func GetKubeConfig(c *cli.Context) error {
 	filters.Add("label", fmt.Sprintf("cluster=%s", c.String("name")))
 	filters.Add("label", "component=server")
 
-	//ContainerList returns the list of containers in the docker host.
+	//ContainerList returns the list of containers/servers in the docker host.
 	server, err := docker.ContainerList(ctx, container.ListOptions{
 		Filters: filters,
 	})
 	if err != nil {
-		return fmt.Errorf("couldn't get server container for cluster %s\n%+v", c.String("name"), err)
+		return fmt.Errorf("failed to get server container for cluster %s\n%+v", c.String("name"), err)
+	}
+	if len(server) == 0 {
+		return fmt.Errorf("no server container for cluster %s", c.String("name"))
 	}
 
 	// get kubeconfig file from container and read contents

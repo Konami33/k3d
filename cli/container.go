@@ -6,42 +6,76 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/docker/go-connections/nat"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	dockerClient "github.com/docker/docker/client"
 )
 
-func createServer(verbose bool, image string, port string, args []string, env []string, name string, volumes []string) (string, error) {
-	log.Printf("Creating server using %s...\n", image)
+// To do: update this function and solve why the package function is not working
+func IsImageNotFoundError(err error) bool {
+	// Check if the error message contains a string indicating that the image is not found
+	return strings.Contains(err.Error(), "No such image") || strings.Contains(err.Error(), "not found")
+}
+
+func startContainer(verbose bool, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, containerName string) (string, error) {
 	ctx := context.Background()
+
 	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
 	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't create docker client\n%+v", err)
 	}
-	reader, err := docker.ImagePull(ctx, image, types.ImagePullOptions{})
-	//reader, err := docker.ImagePull(ctx, image, image.PullOptions{})
-	if err != nil {
-		return "", fmt.Errorf("ERROR: couldn't pull image %s\n%+v", image, err)
-	}
-	//problem
-	if verbose {
-		_, err := io.Copy(os.Stdout, reader) // TODO: only if verbose mode
+
+	// first try createContainer by assuming the image is locally available
+	// resp --> container create response. An object representing the response from Docker after creating the container. It contains information about the newly created container, such as its unique identifier (ID).
+	resp, err := docker.ContainerCreate(ctx, config, hostConfig, networkingConfig, nil, containerName)
+	// if any error from container start means no image found then pull the image
+	if IsImageNotFoundError(err) {
+		log.Printf("Pulling image %s...\n", config.Image)
+		// var reader io.ReadCloser. ImagePull function returns (io.ReadCloser, error)
+		reader, err := docker.ImagePull(ctx, config.Image, image.PullOptions{})
 		if err != nil {
-			log.Printf("WARNING: couldn't get docker output\n%+v", err)
+			return "", fmt.Errorf("ERROR: couldn't pull image %s\n%+v", config.Image, err)
 		}
-	} else {
-		_, err := io.Copy(io.Discard, reader)
+		// It's up to the caller to handle the reader (io.ReadCloser) and close it properly.
+		defer reader.Close()
+		if verbose {
+			// Copy copies from src to dst until either EOF is reached on src or an error occurs. It returns the number of bytes copied and the first error encountered while copying,
+			_, err := io.Copy(os.Stdout, reader)
+			if err != nil {
+				log.Printf("WARNING: couldn't get docker output\n%+v", err)
+			}
+		} else {
+			_, err := io.Copy(io.Discard, reader)
+			if err != nil {
+				log.Printf("WARNING: couldn't get docker output\n%+v", err)
+			}
+		}
+		// after pulling the image try containerCreate again
+		resp, err = docker.ContainerCreate(ctx, config, hostConfig, networkingConfig, nil, containerName)
 		if err != nil {
-			log.Printf("WARNING: couldn't get docker output\n%+v", err)
+			return "", fmt.Errorf("ERROR: couldn't create container after pull %s\n%+v", containerName, err)
 		}
+	} else if err != nil { // if any other error other than image not found happens
+		return "", fmt.Errorf("ERROR: couldn't create container %s\n%+v", containerName, err)
 	}
-	// container basic information
-	containerLabels := make(map[string]string) //initializes an empty map string --> string
+
+	// start the container
+	if err := docker.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		return "", err
+	}
+	return resp.ID, nil
+}
+
+func createServer(verbose bool, image string, port string, args []string, env []string, name string, volumes []string) (string, error) {
+	log.Printf("Creating server using %s...\n", image)
+
+	containerLabels := make(map[string]string)
 	containerLabels["app"] = "k3d"
 	containerLabels["component"] = "server"
 	containerLabels["created"] = time.Now().Format("2006-01-02 15:04:05")
@@ -49,15 +83,14 @@ func createServer(verbose bool, image string, port string, args []string, env []
 
 	containerName := fmt.Sprintf("k3d-%s-server", name)
 
-	// It is used to define port bindings and exposed ports for Docker containers. represents or holding a network port
-	// if port is 8080: it represens port 8080 with the TCP protocol.
 	containerPort := nat.Port(fmt.Sprintf("%s/tcp", port))
 
-	//host config
+	//handle hostconfig
 	hostConfig := &container.HostConfig{
+		// Port mapping between the exposed port (container) and the host
+		// Key = containerPort. Represents the port inside the container
+		// Value = []nat.PortBinding. Represents the port on the host machine. Each nat.PortBinding struct specifies the mapping of a container port to a host port.
 		PortBindings: nat.PortMap{
-			// Key = containerPort. Represents the port inside the container
-			// Value = []nat.PortBinding. Represents the port on the host machine. Each nat.PortBinding struct specifies the mapping of a container port to a host port.
 			containerPort: []nat.PortBinding{
 				{
 					HostIP:   "0.0.0.0",
@@ -67,66 +100,43 @@ func createServer(verbose bool, image string, port string, args []string, env []
 		},
 		Privileged: true,
 	}
+
 	//handle volume
 	if len(volumes) > 0 && volumes[0] != "" {
 		hostConfig.Binds = volumes
 	}
 
 	//networkingConfig
-	// this specifies how the container interacts with Docker networks
 	networkingConfig := &network.NetworkingConfig{
-		// EndpointSettings stores the network endpoint details
-		// This is a map holds the network configuration for different endpoints.
-		// values are pointers to network.EndpointSettings structs.
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			// This is the key of the map, which represents the name of the network endpoint.
-			// Aliases: []string{containerName}: value associated with the name key. It's a pointer to a network.EndpointSettings struct. The Aliases field of this struct is set to an array containing a single string, which is containerName. This means that the endpoint identified by name will have an alias, and that alias is containerName.
 			name: {
 				Aliases: []string{containerName},
 			},
 		},
 	}
 
-	// problem
-	resp, err := docker.ContainerCreate(ctx, &container.Config{
+	// Config contains the configuration data about a container. It should hold only portable information about the container. Here, "portable" means "independent from the host we are running on"
+	config := &container.Config{
 		Image: image,
 		Cmd:   append([]string{"server"}, args...),
-		ExposedPorts: nat.PortSet{ // nat.PortSet{} -> used to manage a collection of network ports.
-			containerPort: struct{}{}, //struct{}{} -> empty struct. Doesn't contain any fields or memory. used when we only need to signal the presence of something without carrying any additional data.
+		ExposedPorts: nat.PortSet{
+			containerPort: struct{}{},
 		},
 		Env:    env,
 		Labels: containerLabels,
-	}, hostConfig, networkingConfig, nil, containerName)
+	}
+	//contianer creattion response ie resp.ID
+	id, err := startContainer(verbose, config, hostConfig, networkingConfig, containerName)
 	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't create container %s\n%+v", containerName, err)
 	}
-	if err := docker.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return "", fmt.Errorf("ERROR: couldn't start container %s\n%+v", containerName, err)
-	}
-	// resp: This variable contains the response from the Docker API after attempting to create a container. It typically includes information about the created container, such as its ID, name, and other metadata.
-	return resp.ID, nil
+
+	return id, nil
 }
 
 // creating worker node
 func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix string, serverPort string) (string, error) {
-	ctx := context.Background()
-	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
-	if err != nil {
-		return "", fmt.Errorf("ERROR: couldn't create docker client\n%+v", err)
-	}
-
-	//pull the k3s image
-	reader, err := docker.ImagePull(ctx, image, types.ImagePullOptions{})
-	if err != nil {
-		return "", fmt.Errorf("ERROR: couldn't pull image %s\n%+v", image, err)
-	}
-	//prints the docker output to the console if verbose flag is set
-	if verbose {
-		_, err := io.Copy(os.Stdout, reader)
-		if err != nil {
-			log.Printf("WARNING: couldn't get docker output\n%+v", err)
-		}
-	}
+	
 	//create the container basic info
 	containerLabels := make(map[string]string)
 	containerLabels["app"] = "k3d"
@@ -163,20 +173,18 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 		},
 	}
 
-	resp, err := docker.ContainerCreate(ctx, &container.Config{
+	config := &container.Config{
 		Image:  image,
 		Env:    env,
 		Labels: containerLabels,
-	}, hostConfig, networkingConfig, nil, containerName)
-	if err != nil {
-		return "", fmt.Errorf("ERROR: couldn't create container %s\n%+v", containerName, err)
 	}
 
-	if err := docker.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+	id, err := startContainer(verbose, config, hostConfig, networkingConfig, containerName)
+	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't start container %s\n%+v", containerName, err)
 	}
 
-	return resp.ID, nil
+	return id, nil
 }
 
 // deleting container
