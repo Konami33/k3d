@@ -17,8 +17,28 @@ func createClusterNetwork(clusterName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't create docker client\n%+v", err)
 	}
+
+	// check if there is any netork found. if found take the first one
+	args := filters.NewArgs()
+	args.Add("label", "app=k3d")
+	args.Add("label", "cluster="+clusterName)
+	// NetworkList returns the list of networks configured in the docker host. returns []types.NetworkResource
+	nl, err := docker.NetworkList(ctx, types.NetworkListOptions{Filters: args})
+	if err != nil {
+		return "", fmt.Errorf("failed to list networks\n%+v", err)
+	}
+
+	if len(nl) > 1 {
+		log.Printf("WARNING: Found %d networks for %s when we only expect 1\n", len(nl), clusterName)
+	}
+
+	// if any network found return the first one
+	if len(nl) > 0 {
+		return nl[0].ID, nil
+	}
 	
 	// resp: containens the info about the newly created network, such as its ID, name, and configuration.
+	// create the network with a set of labels and the cluster name as network name
 	resp, err := docker.NetworkCreate(ctx, clusterName, types.NetworkCreate{
 		// "app": "k3d": indicates that the network is associated with the "k3d" application.
 		// "cluster" : clusterName: indicates the name of the network
