@@ -1,0 +1,8 @@
+1. Unable to Register Node: The node name "k3d-k3s_default-server" is invalid because it violates the naming convention rules. The error message specifies that the node name should consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character.
+Failed to Initialize CSINode: There are two consecutive errors related to the initialization of CSINode. The first error indicates a timeout while updating CSINode annotation due to the node "k3d-k3s_default-server" not being found. The second error is a retry failure due to a timeout waiting for the condition.
+
+Solution:
+    The name of the node should be changed to a valid name.
+    The problem with the name "k3d-k3s_default-server" is that it contains underscores. According to the Kubernetes naming convention, the name of a node must adhere to the following rules:
+    It must consist of lowercase alphanumeric characters or '-', and must start and end with an alphanumeric character.
+    It cannot contain underscores ('_').

@@ -70,6 +70,13 @@ func CreateCluster(c *cli.Context) error {
 	if c.IsSet("server-arg") || c.IsSet("x") {
 		k3sServerArgs = append(k3sServerArgs, c.StringSlice("server-arg")...)
 	}
+
+	// create publish ports
+	publishedPorts, err := createPublishedPorts(c.StringSlice("publish"))
+	if (err != nil) {
+		log.Fatalf("ERROR: failed to parse the publish parameter.\n%+v", err)
+	}
+
 	// let's go
 	log.Printf("Creating cluster [%s]", c.String("name"))
 
@@ -85,6 +92,7 @@ func CreateCluster(c *cli.Context) error {
 		env,
 		c.String("name"),
 		strings.Split(c.String("volume"), ","), //value: "dir1:mount1,dir2:mount2" --> []string{"dir1:mount1", "dir2:mount2"}
+		publishedPorts,
 	)
 	if err != nil {
 		log.Fatalf("ERROR: failed to create cluster\n%+v", err)
@@ -179,6 +187,7 @@ func DeleteCluster(c *cli.Context) error {
 	//creating cluster map name-->cluster struct
 	clusters := make(map[string]cluster)
 	// if not all get specified cluster
+
 	if !c.Bool("all") {
 		cluster, err := getCluster(c.String("name"))
 		if err != nil {
@@ -218,6 +227,8 @@ func DeleteCluster(c *cli.Context) error {
 			return fmt.Errorf("ERROR: Couldn't remove server for cluster %s\n%+v", cluster.name, err)
 		}
 
+		// deleting the cluster network
+		log.Println("...Removing cluster network")
 		if err := deleteClusterNetwork(cluster.name); err != nil {
 			log.Printf("WARNING: couldn't delete cluster network for cluster %s\n%+v", cluster.name, err)
 		}
@@ -332,6 +343,7 @@ func StartCluster(c *cli.Context) error {
 	}
 	return nil
 }
+
 // ListClusters prints a list of created clusters
 func ListClusters(c *cli.Context) error {
 	printClusters(c.Bool("all"))
@@ -378,7 +390,7 @@ func GetKubeConfig(c *cli.Context) error {
 	// It's up to the caller to close the reader.
 	defer reader.Close()
 
-	// ReadAll reads from reader until an error or EOF and returns the data it read. 
+	// ReadAll reads from reader until an error or EOF and returns the data it read.
 	readBytes, err := io.ReadAll(reader)
 	if err != nil {
 		return fmt.Errorf("ERROR: couldn't read kubeconfig from container\n%+v", err)
@@ -391,13 +403,13 @@ func GetKubeConfig(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	
+
 	//Create creates or truncates the named file. If the file already exists, it is truncated. If the file does not exist, it is created with mode 0666 (before umask). If successful, methods on the returned File can be used for I/O;
 	kubeconfigfile, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("ERROR: couldn't create kubeconfig.yaml in %s\n%+v", clusterDir, err)
 	}
-	//Close closes the File, rendering it unusable for I/O. 
+	//Close closes the File, rendering it unusable for I/O.
 	// defer: Execute this line just before leaving the function."
 	defer kubeconfigfile.Close()
 

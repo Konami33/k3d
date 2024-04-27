@@ -1,10 +1,10 @@
 package version
 
 // Version is the string that contains version
-var Version string
+var Version = "latest"
 
 // K3sVersion contains the latest version tag of K3s
-var K3sVersion = "latest"
+//var K3sVersion = "v1.29.4-rc1-k3s1"
 
 // GetVersion returns the version for cli, it gets it from "git describe --tags" or returns "dev" when doing simple go build
 func GetVersion() string {
@@ -16,5 +16,5 @@ func GetVersion() string {
 
 // GetK3sVersion returns the version string for K3s
 func GetK3sVersion() string {
-	return K3sVersion
+	return Version
 }
