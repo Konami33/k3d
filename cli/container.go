@@ -64,7 +64,7 @@ func startContainer(verbose bool, config *container.Config, hostConfig *containe
 	return resp.ID, nil
 }
 
-func createServer(verbose bool, image string, port string, args []string, env []string, name string, volumes []string, nodeToPortSpecMap map[string][]string) (string, error) {
+func createServer(verbose bool, image string, apiPort string, args []string, env []string, name string, volumes []string, nodeToPortSpecMap map[string][]string) (string, error) {
 	log.Printf("Creating server using %s...\n", image)
 
 	containerLabels := make(map[string]string)
@@ -83,7 +83,7 @@ func createServer(verbose bool, image string, port string, args []string, env []
 	}
 
 	//problem
-	apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", port, port)
+	apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", apiPort, apiPort)
 	
 	serverPorts = append(serverPorts, apiPortSpec)
 	serverPublishedPorts, err := CreatePublishedPorts(serverPorts)
@@ -135,7 +135,7 @@ func createServer(verbose bool, image string, port string, args []string, env []
 }
 
 // creating worker node
-func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix int, serverPort string, nodeToPortSpecMap map[string][]string) (string, error) {
+func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix int, serverPort string, nodeToPortSpecMap map[string][]string, portAutoOffset int) (string, error) {
 
 	//create the container basic info
 	containerLabels := make(map[string]string)
@@ -156,6 +156,7 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 	// ports to be assigned to the server belong to roles
 	// all, server or <server-container-name>
 	workerPorts, err := MergePortSpecs(nodeToPortSpecMap, "worker", containerName)
+	fmt.Printf("%s -> ports: %+v\n", containerName, workerPorts)
 	if err != nil {
 		return "", err
 	}
@@ -163,7 +164,11 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 	if err != nil {
 		return "", err
 	}
-	workerPublishedPorts = workerPublishedPorts.Offset(postfix + 1)
+	//workerPublishedPorts = workerPublishedPorts.Offset(postfix + 1)
+	if portAutoOffset > 0 {
+		// TODO: add some checks before to print a meaningful log message saying that we cannot map multiple container ports to the same host port without a offset
+		workerPublishedPorts = workerPublishedPorts.Offset(postfix + portAutoOffset)
+	}
 
 	hostConfig := &container.HostConfig{
 		//  Each entry represents a temporary filesystem (tmpfs) mount point within the container.
