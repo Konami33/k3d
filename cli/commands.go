@@ -377,33 +377,14 @@ func GetKubeConfig(c *cli.Context) error {
 
 	cluster := c.String("name")
 	// create destination kubeconfig file
-	// destPath = getClusterDir + kubeconfig.yaml
+	// destPath = getClusterDir/kubeconfig.yaml
 	// clusterDir = $HOME/.config/k3d/<cluster_name>
-	destPath, err := getClusterKubeConfigPath(cluster)
+	kubeConfigPath, err := getKubeConfig(cluster)
 	if err != nil {
 		return err
 	}
-
-	if clusters, err := getClusters(false, cluster); err != nil || len(clusters) != 1 {
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("cluster %s does not exist", cluster)
-	}
-
-	// If kubeconfig.yaml has not been created, generate it now.
-	// IsNotExist returns a boolean indicating whether the error is known to report that a file or directory does not exist
-	// Stat returns a FileInfo describing the named file
-	if _, err := os.Stat(destPath); os.IsNotExist(err) {
-		if err = createKubeConfigFile(cluster); err != nil {
-			return err
-		}
-	} else {
-		return err
-	}
-
 	// output kubeconfig file path to stdout
-	fmt.Println(destPath)
+	fmt.Println(kubeConfigPath)
 
 	return nil
 }
