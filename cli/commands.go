@@ -18,7 +18,10 @@ import (
 	"github.com/urfave/cli"
 )
 
-const defaultRegistry = "docker.io"
+const (
+	defaultRegistry    = "docker.io"
+	defaultServerCount = 1
+)
 
 // CheckTools checks if the installed tools work correctly
 // command: docker version
@@ -107,7 +110,7 @@ func CreateCluster(c *cli.Context) error {
 		k3sServerArgs = append(k3sServerArgs, c.StringSlice("server-arg")...)
 	}
 
-	portmap, err := mapNodesToPortSpecs(c.StringSlice("publish"))
+	portmap, err := mapNodesToPortSpecs(c.StringSlice("publish"), GetAllContainerNames(c.String("name"), defaultServerCount, c.Int("workers")))
 	if err != nil {
 		log.Fatal(err)
 	}
