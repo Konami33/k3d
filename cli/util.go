@@ -1,23 +1,26 @@
 package run
 
 import (
+	"fmt"
 	"math/rand"
 	"strings"
 	"time"
 )
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+const clusterNameMaxSize int = 35
 // These constants are used for calculating the random index within the letterBytes string.
-	// Calculation:
-	// letterIdxBits = 6:
-	// This means that each letter index can be represented using 6 bits.
-	// letterIdxMask = 1<<6 - 1:
-	// Using bitwise left shift (<<), we shift 1 six positions to the left, which results in 1000000.
-	// Then, we subtract 1 from this value, which sets all the bits to 1 except the leftmost bit, resulting in 111111.
-	// So, letterIdxMask is 63 (111111 in binary), which is the maximum value that can be represented with 6 bits.
-	// letterIdxMax = 63 / 6:
-	// We divide 63 (the maximum value representable with 6 bits) by 6, which gives 10.
-	// This means that there are 10 unique indices that can be represented with 6 bits.
+// Calculation:
+// letterIdxBits = 6:
+// This means that each letter index can be represented using 6 bits.
+// letterIdxMask = 1<<6 - 1:
+// Using bitwise left shift (<<), we shift 1 six positions to the left, which results in 1000000.
+// Then, we subtract 1 from this value, which sets all the bits to 1 except the leftmost bit, resulting in 111111.
+// So, letterIdxMask is 63 (111111 in binary), which is the maximum value that can be represented with 6 bits.
+// letterIdxMax = 63 / 6:
+// We divide 63 (the maximum value representable with 6 bits) by 6, which gives 10.
+// This means that there are 10 unique indices that can be represented with 6 bits.
 const (
 	letterIdxBits = 6                    // 6 bits to represent a letter index
 	letterIdxMask = 1<<letterIdxBits - 1 // 111111
@@ -25,12 +28,12 @@ const (
 )
 
 // time.Now().UnixNano() returns the current time in nanoseconds since January 1, 1970 .
-// rand.NewSource creates a new random number generator source using an int64 seed value. 
+// rand.NewSource creates a new random number generator source using an int64 seed value.
 var src = rand.NewSource(time.Now().UnixNano())
 
 // GenerateRandomString thanks to https://stackoverflow.com/a/31832326/6450189
 func GenerateRandomString(n int) string {
-	
+
 	//A Builder is used to efficiently build a string using [Builder.Write]
 	sb := strings.Builder{}
 	// Grow grows sb's capacity, if necessary, to guarantee space for another n bytes. After Grow(n), at least n bytes can be written to b without another allocation. If n is negative, Grow panics.
@@ -56,4 +59,33 @@ func GenerateRandomString(n int) string {
 		remain--
 	}
 	return sb.String()
+}
+
+// Make sure a cluster name is also a valid host name according to RFC 1123.
+// We further restrict the length of the cluster name to shorter than 'clusterNameMaxSize'
+// so that we can construct the host names based on the cluster name, and still stay
+// within the 64 characters limit.
+func CheckClusterName(name string) error {
+	if len(name) > clusterNameMaxSize {
+		return fmt.Errorf("cluster name is too long")
+	}
+
+	if name[0] == '-' || name[len(name)-1] == '-' {
+		return fmt.Errorf("cluster name can not start or end with - (dash)")
+	}
+
+	for _, c := range name {
+		switch {
+		case '0' <= c && c <= '9':
+		case 'a' <= c && c <= 'z':
+		case 'A' <= c && c <= 'Z':
+		case c == '-':
+			continue
+		default:
+			return fmt.Errorf("cluster name contains characters other than 'Aa-Zz', '0-9' or '-'")
+
+		}
+	}
+
+	return nil
 }
