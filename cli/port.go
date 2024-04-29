@@ -14,17 +14,17 @@ type PublishedPorts struct {
 	PortBindings map[nat.Port][]nat.PortBinding
 }
 
-// Portmap maps node roles/names to a set of PublishedPorts
-type Portmap struct {
-	Node  string
-	Ports *PublishedPorts
-}
-
 // defaultNodes describes the type of nodes on which a port should be exposed by default
 const defaultNodes = "all"
 
-// createPortMap creates a list of portmaps that map nodes (roles or names) to a list of published ports
-func createPortMap(specs []string) (*[]Portmap, error) {
+// mapping a node role to groups that should be applied to it
+var nodeRuleGroupsMap = map[string][]string{
+	"worker": []string{"all", "workers"},
+	"server": []string{"all", "server", "master"},
+}
+
+// mapNodesToPortSpecs maps nodes to portSpecs
+func mapNodesToPortSpecs(specs []string) (map[string][]string, error) {
 
 	if err := validatePortSpecs(specs); err != nil {
 		return nil, err
@@ -41,28 +41,14 @@ func createPortMap(specs []string) (*[]Portmap, error) {
 			nodeToPortSpecMap[node] = append(nodeToPortSpecMap[node], portSpec)
 		}
 	}
-	// create a list of portmaps struct
-	portmaps := []Portmap{}
-	for node, portSpecs := range nodeToPortSpecMap {
-		// createPublishedPorts creates a PublishedPorts object from a list of port specifications
-		// TODO: this is a temporary fix to allow the default node to be specified
-		ports, err := createPublishedPorts(portSpecs)
-		if err != nil {
-			return nil, err
-		}
-		// create a new Portmap object and append it to the list of portmaps
-		newPortMap := Portmap{
-			Node:  node,
-			Ports: ports,
-		}
-		portmaps = append(portmaps, newPortMap)
-	}
-	return &portmaps, nil
+	fmt.Printf("nodeToPortSpecMap: %+v\n", nodeToPortSpecMap)
+
+	return nodeToPortSpecMap, nil
 }
 
 // The factory function for PublishedPorts
 // createPublishedPorts creates a PublishedPorts object from a list of port specifications
-func createPublishedPorts(specs []string) (*PublishedPorts, error) {
+func CreatePublishedPorts(specs []string) (*PublishedPorts, error) {
 	// if no specs defined create an empty PublishedPorts object
 	if len(specs) == 0 {
 		var newExposedPorts = make(map[nat.Port]struct{}, 1)
@@ -83,7 +69,6 @@ func createPublishedPorts(specs []string) (*PublishedPorts, error) {
 // (?P<containerPort>[0-9]{1,6}): This part matches the container port. It captures the container port in the group named containerPort.
 // ((/(?P<protocol>udp|tcp))?(?P<nodes>(@(?P<node>[\w-]+))*)): This part matches the protocol (either udp or tcp) and any associated nodes. It captures the protocol in the group named protocol and the nodes in the group named nodes.
 
-
 func validatePortSpecs(specs []string) error {
 	// regex matching (no sophisticated IP/Hostname matching at the moment)
 	regex := regexp.MustCompile(`^(((?P<host>[\w\.]+)?:)?((?P<hostPort>[0-9]{0,6}):)?(?P<containerPort>[0-9]{1,6}))((/(?P<protocol>udp|tcp))?(?P<nodes>(@(?P<node>[\w-]+))*))$`)
@@ -96,10 +81,10 @@ func validatePortSpecs(specs []string) error {
 }
 
 // extractNodes separates the node specification from the actual port specse
-//use case:
-	// Suppose spec is "80:80@node1@node2".
-	// After splitting, portSpec becomes "80:80", and nodes becomes ["node1", "node2"].
-	// If spec were "80:80", portSpec would still be "80:80", but nodes would be ["all"] because no specific nodes were provided.
+// use case:
+// Suppose spec is "80:80@node1@node2".
+// After splitting, portSpec becomes "80:80", and nodes becomes ["node1", "node2"].
+// If spec were "80:80", portSpec would still be "80:80", but nodes would be ["all"] because no specific nodes were provided.
 func extractNodes(spec string) ([]string, string) {
 	// extract nodes
 	nodes := []string{}
@@ -125,7 +110,7 @@ func (p PublishedPorts) Offset(offset int) *PublishedPorts {
 	for k, v := range p.ExposedPorts {
 		newExposedPorts[k] = v
 	}
-	
+
 	for k, v := range p.PortBindings {
 
 		bindings := make([]nat.PortBinding, len(v))
@@ -174,4 +159,39 @@ func (p *PublishedPorts) AddPort(portSpec string) (*PublishedPorts, error) {
 	}
 
 	return &PublishedPorts{ExposedPorts: newExposedPorts, PortBindings: newPortBindings}, nil
+}
+
+// MergePortSpecs merges published ports for a given node
+func MergePortSpecs(nodeToPortSpecMap map[string][]string, role, name string) ([]string, error) {
+
+	portSpecs := []string{}
+
+	// add portSpecs according to node role: server or worker
+	for _, group := range nodeRuleGroupsMap[role] {
+		for _, v := range nodeToPortSpecMap[group] {
+			exists := false
+			for _, i := range portSpecs {
+				if v == i {
+					exists = true
+				}
+			}
+			if !exists {
+				portSpecs = append(portSpecs, v)
+			}
+		}
+	}
+
+	// add portSpecs according to node name
+	for _, v := range nodeToPortSpecMap[name] {
+		exists := false
+		for _, i := range portSpecs {
+			if v == i {
+				exists = true
+			}
+		}
+		if !exists {
+			portSpecs = append(portSpecs, v)
+		}
+	}
+	return portSpecs, nil
 }

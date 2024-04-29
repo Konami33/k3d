@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"k3d-go/version"
 	"log"
 	"os"
@@ -11,7 +12,8 @@ import (
 )
 
 // defaultK3sImage specifies the default image being used for server and workers
-//const defaultK3sImage = "docker.io/rancher/k3s"
+const defaultK3sImage string = "docker.io/rancher/k3s"
+const defaultK3sClusterName string = "k3s-default"
 
 func main() {
 	app := cli.NewApp() //creating a command line application
@@ -38,7 +40,7 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "name, n",
-					Value: "k3s-default",
+					Value: defaultK3sClusterName,
 					Usage: "Set a name for the cluster",
 				},
 				cli.StringFlag{
@@ -51,7 +53,7 @@ func main() {
 				},
 				cli.StringFlag{
 					Name:  "version",
-					Value: version.GetK3sVersion(),
+					//Value: version.GetK3sVersion(),
 					Usage: "Choose the k3s image version",
 				},
 				//specify port
@@ -71,6 +73,11 @@ func main() {
 					Name:  "wait, w",
 					Usage: "Wait for the cluster to come up before returning",
 				},
+				cli.StringFlag{
+					Name:  "image, i",
+					Usage: "Specify a k3s image (Format: <repo>/<image>:<tag>)",
+					Value: fmt.Sprintf("%s:%s", defaultK3sImage, version.GetK3sVersion()),
+				},	
 				//accept multiple string values. can be passed multiple values for a single flag.
 				cli.StringSliceFlag{
 					//name of the flag. can be used as either "--server-arg" or "-x"
@@ -98,7 +105,7 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "name, n",
-					Value: "k3s-default",
+					Value: defaultK3sClusterName,
 					Usage: "name of the cluster",
 				},
 				cli.BoolFlag{
@@ -114,7 +121,7 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "name, n",
-					Value: "k3s-default",
+					Value: defaultK3sClusterName,
 					Usage: "Name of the cluster",
 				},
 				cli.BoolFlag{
@@ -130,7 +137,7 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "name, n",
-					Value: "k3s-default",
+					Value: defaultK3sClusterName,
 					Usage: "Name of the cluster",
 				},
 				cli.BoolFlag{
@@ -158,7 +165,7 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "name, n",
-					Value: "k3s-default",
+					Value: defaultK3sClusterName,
 					Usage: "Name of the cluster",
 				},
 				cli.BoolFlag{

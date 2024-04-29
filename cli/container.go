@@ -64,7 +64,7 @@ func startContainer(verbose bool, config *container.Config, hostConfig *containe
 	return resp.ID, nil
 }
 
-func createServer(verbose bool, image string, port string, args []string, env []string, name string, volumes []string, pPorts *PublishedPorts) (string, error) {
+func createServer(verbose bool, image string, port string, args []string, env []string, name string, volumes []string, nodeToPortSpecMap map[string][]string) (string, error) {
 	log.Printf("Creating server using %s...\n", image)
 
 	containerLabels := make(map[string]string)
@@ -75,12 +75,20 @@ func createServer(verbose bool, image string, port string, args []string, env []
 
 	containerName := fmt.Sprintf("k3d-%s-server", name)
 
-	//containerPort := nat.Port(fmt.Sprintf("%s/tcp", port))
+	// ports to be assigned to the server belong to roles
+	// all, server or <server-container-name>
+	serverPorts, err := MergePortSpecs(nodeToPortSpecMap, "server", containerName)
+	if err != nil {
+		return "", err
+	}
+
 	//problem
 	apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", port, port)
-	serverPublishedPorts, err := pPorts.AddPort(apiPortSpec)
+	
+	serverPorts = append(serverPorts, apiPortSpec)
+	serverPublishedPorts, err := CreatePublishedPorts(serverPorts)
 	if err != nil {
-		log.Fatalf("Error: failed to parse API port spec %s \n%+v", apiPortSpec, err)
+		log.Fatalf("Error: failed to parse port specs %+v \n%+v", serverPorts, err)
 	}
 
 	//handle hostconfig
@@ -127,7 +135,7 @@ func createServer(verbose bool, image string, port string, args []string, env []
 }
 
 // creating worker node
-func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix int, serverPort string, pPorts *PublishedPorts) (string, error) {
+func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix int, serverPort string, nodeToPortSpecMap map[string][]string) (string, error) {
 
 	//create the container basic info
 	containerLabels := make(map[string]string)
@@ -145,7 +153,17 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 	// host TCP port 80  -> k3s server TCP 80.
 	// host UDP port 91 -> k3s worker 0 UDP 90. UDP traffic
 
-	workerPublishedPorts := pPorts.Offset(postfix + 1)
+	// ports to be assigned to the server belong to roles
+	// all, server or <server-container-name>
+	workerPorts, err := MergePortSpecs(nodeToPortSpecMap, "worker", containerName)
+	if err != nil {
+		return "", err
+	}
+	workerPublishedPorts, err := CreatePublishedPorts(workerPorts)
+	if err != nil {
+		return "", err
+	}
+	workerPublishedPorts = workerPublishedPorts.Offset(postfix + 1)
 
 	hostConfig := &container.HostConfig{
 		//  Each entry represents a temporary filesystem (tmpfs) mount point within the container.
@@ -179,7 +197,7 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 		Image:        image,
 		Env:          env,
 		Labels:       containerLabels,
-		ExposedPorts: pPorts.ExposedPorts,
+		ExposedPorts: workerPublishedPorts.ExposedPorts,
 	}
 
 	id, err := startContainer(verbose, config, hostConfig, networkingConfig, containerName)
