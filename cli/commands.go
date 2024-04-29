@@ -385,6 +385,9 @@ func GetKubeConfig(c *cli.Context) error {
 	}
 	// output kubeconfig file path to stdout
 	fmt.Println(kubeConfigPath)
-
 	return nil
+}
+//Bash function
+func Bash(c *cli.Context) error {
+	return bashShell(c.String("name"))
 }

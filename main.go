@@ -34,6 +34,19 @@ func main() {
 			Action:  run.CheckTools,
 		},
 		{
+			// bash starts a bash shell in the context of a runnign cluster
+			Name:  "bash",
+			Usage: "Start a bash subshell for a cluster",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "name, n",
+					Value: defaultK3sClusterName,
+					Usage: "Set a name for the cluster",
+				},
+			},
+			Action: run.Bash,
+		},
+		{
 			Name:    "create",
 			Aliases: []string{"c"},
 			Usage:   "Create a single- or multi-node k3s cluster in docker containers",
@@ -60,7 +73,7 @@ func main() {
 					Usage: "Automatically add an offset (* worker number) to the chosen host port when using `--publish` to map the same container-port from multiple k3d workers to the host",
 				},
 				cli.StringFlag{
-					Name:  "version",
+					Name: "version",
 					//Value: version.GetK3sVersion(),
 					Usage: "Choose the k3s image version",
 				},
@@ -88,7 +101,7 @@ func main() {
 					Name:  "image, i",
 					Usage: "Specify a k3s image (Format: <repo>/<image>:<tag>)",
 					Value: fmt.Sprintf("%s:%s", defaultK3sImage, version.GetK3sVersion()),
-				},	
+				},
 				//accept multiple string values. can be passed multiple values for a single flag.
 				cli.StringSliceFlag{
 					//name of the flag. can be used as either "--server-arg" or "-x"
