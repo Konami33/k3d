@@ -10,3 +10,18 @@ FromEnv Function:
     It automatically configures the client to communicate with the Docker Engine running on the local machine or a remote machine, depending on the environment variables.
 Why tmpfs are Needed: 
     Mounting /run and /var/run as tmpfs can be beneficial for containerized applications that rely on runtime data or need to write temporary files. Using tmpfs for these directories can improve performance and reduce wear on disk storage, especially in environments where container disk storage is limited or where disk I/O performance is critical. Additionally, tmpfs mounts are automatically cleaned up when the container exits, helping to keep the filesystem clean.
+
+Regular expression and regex object:
+    
+    A regular expression (regex) is a sequence of characters that forms a search pattern, used mainly for pattern matching within strings. It's a powerful tool for string manipulation and searching, allowing you to specify complex patterns of text to be found or replaced in strings. (Go to reg expression cheat sheet for more clarification)
+
+    Here's a breakdown of the components of a regex pattern:
+
+    1. Literals: Characters that match themselves. For example, the letter "a" in a regex pattern will match the letter "a" in a string.
+    2. Metacharacters: Characters with special meanings in regex. For example, the dot . matches any single character, and the asterisk * matches zero or more occurrences of the preceding character.
+    3. Character Classes: Sets of characters enclosed in square brackets []. For example, [aeiou] matches any vowel.
+    4. Quantifiers: Indicate the number of occurrences of the preceding character or group. For example, * matches zero or more occurrences, + matches one or more occurrences, and ? matches zero or one occurrence.
+    5. Anchors: Specify positions in the string. For example, ^ matches the start of the string, and $ matches the end of the string.
+    6. Grouping: Parentheses () are used to group parts of the pattern together. This allows applying quantifiers to multiple characters.
+
+    A Regexp object, often referred to as a regex object, is a data structure provided by programming languages and libraries that represents a compiled regex pattern. It allows you to apply the pattern to strings for various operations like matching, searching, replacing, and splitting.

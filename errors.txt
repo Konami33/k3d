@@ -6,3 +6,7 @@ Solution:
     The problem with the name "k3d-k3s_default-server" is that it contains underscores. According to the Kubernetes naming convention, the name of a node must adhere to the following rules:
     It must consist of lowercase alphanumeric characters or '-', and must start and end with an alphanumeric character.
     It cannot contain underscores ('_').
+
+2. Worker is created but automatically stops after a few seconds. This error will show in the log file: level=fatal msg="--token is required"
+Solution:
+    Initialize k3sClusterSecrete and k3sToken. 
