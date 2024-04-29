@@ -87,6 +87,13 @@ func getClusterDir(name string) (string, error) {
 	return path.Join(homeDir, ".config", "k3d", name), nil
 }
 
+func getClusterKubeConfigPath(cluster string) (string, error) {
+	// clusterDir = $HOME/.config/k3d/<cluster_name>
+	clusterDir, err := getClusterDir(cluster)
+	// might be a problem
+	return path.Join(clusterDir, "kubeconfig.yaml"), err
+}
+
 // printClusters prints the names of existing clusters
 func printClusters() {
 	clusters, err := getClusters(true, "")

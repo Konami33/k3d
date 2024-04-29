@@ -58,6 +58,15 @@ func CreateCluster(c *cli.Context) error {
 		return fmt.Errorf("ERROR: Cluster %s already exists", c.String("name"))
 	}
 
+	// On Error delete the cluster.  If there createCluster() encounter any error,
+	// call this function to remove all resources allocated for the cluster so far
+	// so that they don't linger around.
+	deleteCluster := func() {
+		if err := DeleteCluster(c); err != nil {
+			log.Printf("Error: Failed to delete cluster %s", c.String("name"))
+		}
+	}
+
 	// define image
 	image := c.String("image") //for now: docker.io/rancher/k3s:latest
 	if c.IsSet("version") {
@@ -138,13 +147,8 @@ func CreateCluster(c *cli.Context) error {
 		c.Bool("auto-restart"), // remain "running" up on docker daemon restart.
 	)
 	if err != nil {
-		log.Printf("ERROR: failed to create cluster\n%+v", err)
-		// Delete cluster if it is not started due to port confliction or any other unseen reason
-		delErr := DeleteCluster(c)
-		if delErr != nil {
-			return delErr
-		}
-		os.Exit(1)
+		deleteCluster()
+		return err
 	}
 	ctx := context.Background()
 	// dockerClient provides a client library for interacting with the Docker Engine API
@@ -167,10 +171,7 @@ func CreateCluster(c *cli.Context) error {
 	for c.IsSet("wait") {
 		// if timeout is set and time is up, delete the cluster and return an error
 		if timeout != 0 && !time.Now().After(start.Add(timeout)) {
-			err := DeleteCluster(c)
-			if err != nil {
-				return err
-			}
+			deleteCluster() //literal function
 			return errors.New("cluster creation exceeded specified timeout")
 		}
 		// get the docker logs of the created container
@@ -228,12 +229,8 @@ func CreateCluster(c *cli.Context) error {
 			)
 			if err != nil {
 				// if worker creation fails, delete the cluster and exit. Atomic creation
-				log.Printf("ERROR: failed to create worker node for cluster %s\n%+v", c.String("name"), err)
-				delErr := DeleteCluster(c)
-				if delErr != nil {
-					return delErr
-				}
-				os.Exit(1)
+				deleteCluster() // literal function 
+				return err
 			}
 			log.Printf("Created worker with ID %s\n", workerID)
 		}
@@ -425,8 +422,7 @@ func GetKubeConfig(c *cli.Context) error {
 
 	// create destination kubeconfig file
 	// getClusterDir returns the path to the cluster directory: $HOME/.config/k3d/<cluster_name>
-	clusterDir, err := getClusterDir(c.String("name"))
-	destPath := fmt.Sprintf("%s/kubeconfig.yaml", clusterDir)
+	destPath, err := getClusterKubeConfigPath(c.String("name"))
 	if err != nil {
 		return err
 	}
@@ -434,7 +430,7 @@ func GetKubeConfig(c *cli.Context) error {
 	//Create creates or truncates the named file. If the file already exists, it is truncated. If the file does not exist, it is created with mode 0666 (before umask). If successful, methods on the returned File can be used for I/O;
 	kubeconfigfile, err := os.Create(destPath)
 	if err != nil {
-		return fmt.Errorf("ERROR: couldn't create kubeconfig.yaml in %s\n%+v", clusterDir, err)
+		return fmt.Errorf("ERROR: couldn't create kubeconfig.yaml in %s\n%+v", destPath, err)
 	}
 	//Close closes the File, rendering it unusable for I/O.
 	// defer: Execute this line just before leaving the function."
