@@ -20,6 +20,37 @@ import (
 
 const defaultRegistry = "docker.io"
 
+const clusterNameMaxSize int = 35
+
+// Make sure a cluster name is also a valid host name according to RFC 1123.
+// We further restrict the length of the cluster name to shorter than 'clusterNameMaxSize'
+// so that we can construct the host names based on the cluster name, and still stay
+// within the 64 characters limit.
+func checkClusterName(name string) error {
+	if len(name) > clusterNameMaxSize {
+		return fmt.Errorf("cluster name is too long")
+	}
+
+	if name[0] == '-' || name[len(name)-1] == '-' {
+		return fmt.Errorf("cluster name can not start or end with - (dash)")
+	}
+
+	for _, c := range name {
+		switch {
+		case '0' <= c && c <= '9':
+		case 'a' <= c && c <= 'z':
+		case 'A' <= c && c <= 'Z':
+		case c == '-':
+			continue
+		default:
+			return fmt.Errorf("cluster name contains characters other than 'Aa-Zz', '0-9' or '-'")
+
+		}
+	}
+
+	return nil
+}
+
 // CheckTools checks if the installed tools work correctly
 // command: docker version
 func CheckTools(c *cli.Context) error {
@@ -42,8 +73,13 @@ func CheckTools(c *cli.Context) error {
 // CreateCluster creates a new single-node cluster container and initializes the cluster directory
 func CreateCluster(c *cli.Context) error {
 
+	//handle cluster name
+	if err := checkClusterName(c.String("name")); err != nil {
+		return err;
+	}
+
 	// define image
-	image := c.String("image")
+	image := c.String("image") //for now: docker.io/rancher/k3s:latest
 	if c.IsSet("version") {
 		// TODO: --version to be deprecated
 		log.Println("[WARNING] The `--version` flag will be deprecated soon, please use `--image rancher/k3s:<version>` instead")
@@ -52,6 +88,7 @@ func CreateCluster(c *cli.Context) error {
 			log.Fatalln("[ERROR] Please use `--image <image>:<version>` instead of --image and --version")
 		} else {
 			// version specified, default image = ok (until deprecation of version flag)
+			// docker.io/rancher/k3s:
 			image = fmt.Sprintf("%s:%s", strings.Split(image, ":")[0], c.String("version"))
 		}
 	}
