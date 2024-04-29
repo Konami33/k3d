@@ -6,7 +6,7 @@ import (
 	"os/exec"
 )
 
-func bashShell(cluster string) error {
+func bashShell(cluster string, command string) error {
 	kubeConfigPath, err := getKubeConfig(cluster)
 	if err != nil {
 		return err
@@ -25,8 +25,13 @@ func bashShell(cluster string) error {
 	// "--noprofile": an argument passed to Bash. It instructs Bash not to read the system-wide profile file for login shells. Useful when you want to start Bash quickly without loading any additional configurations.
 	// "--norc": It instructs Bash not to read the user's ~/.bashrc file. Similar to --noprofile, it helps start Bash more quickly without loading additional configurations.
 	// Command returns the Cmd struct to execute the named program with the given arguments. It sets only the Path and Args in the returned structure.
-	
+
 	cmd := exec.Command(bashPath, "--noprofile", "--norc")
+
+	if len(command) > 0 {
+		//  k3d bash -c 'kubectl cluster-info'
+		cmd.Args = append(cmd.Args, "-c", command)
+	}
 
 	// Set up stdio
 	cmd.Stdout = os.Stdout
