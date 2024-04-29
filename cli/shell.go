@@ -11,11 +11,22 @@ func bashShell(cluster string) error {
 	if err != nil {
 		return err
 	}
+
+	// find out the bash path
+	// LookPath searches for an executable named file in the directories named by the $PATH environment variable. LookPath also uses $PATHEXT environment variable to match a suitable candidate.
+	// If a match is found, LookPath returns the absolute pathname of the executable file.
+	// If no match is found, LookPath returns the string "", and err is set to os.ErrNotExist.
+	bashPath, err := exec.LookPath("bash")
+	if err != nil {
+		return err
+	}
+
 	//"/bin/bash": Path to the Bash executable. Specifies that the command to be executed is Bash.
 	// "--noprofile": an argument passed to Bash. It instructs Bash not to read the system-wide profile file for login shells. Useful when you want to start Bash quickly without loading any additional configurations.
 	// "--norc": It instructs Bash not to read the user's ~/.bashrc file. Similar to --noprofile, it helps start Bash more quickly without loading additional configurations.
 	// Command returns the Cmd struct to execute the named program with the given arguments. It sets only the Path and Args in the returned structure.
-	cmd := exec.Command("/bin/bash", "--noprofile", "--norc")
+	
+	cmd := exec.Command(bashPath, "--noprofile", "--norc")
 
 	// Set up stdio
 	cmd.Stdout = os.Stdout
