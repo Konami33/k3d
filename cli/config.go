@@ -23,8 +23,8 @@ type cluster struct {
 	serverPorts []string
 	// types.Container is a struct type defined in the Docker API package.
 	// It represents information about a Docker container, such as its ID, name, image, state, and other attributes.
-	server      types.Container
-	workers     []types.Container
+	server  types.Container
+	workers []types.Container
 }
 
 // createDirIfNotExists checks for the existence of a directory and creates it along with all required parents if not.
@@ -80,6 +80,8 @@ func printClusters(all bool) {
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 	table.SetHeader([]string{"NAME", "IMAGE", "STATUS", "WORKERS"})
 
+	tableEmplty := true
+
 	for _, cluster := range clusters {
 		workersRunning := 0
 		for _, worker := range cluster.workers {
@@ -92,10 +94,32 @@ func printClusters(all bool) {
 
 		if cluster.status == "running" || all {
 			table.Append(clusterData)
+			tableEmplty = false
 		}
 	}
-	table.Render()
+	if !tableEmplty {
+		table.Render()
+	}
 }
+
+// Classify cluster state: Running, Stopped or Abnormal
+func getClusterStatus(server types.Container, workers []types.Container) string {
+	// The cluster is in the abnromal state when server state and the worker
+	// states don't agree.
+	for _, w := range workers {
+		if w.State != server.State {
+			return "unhealthy"
+		}
+	}
+
+	switch server.State {
+	case "exited": // All containers in this state are most likely
+		// as the result of running the "k3d stop" command.
+		return "stopped"
+	}
+	return server.State
+}
+
 func getClusters() (map[string]cluster, error) {
 
 	ctx := context.Background()
@@ -124,6 +148,7 @@ func getClusters() (map[string]cluster, error) {
 
 	for _, server := range k3dServers {
 		filters.Add("label", fmt.Sprintf("cluster=%s", server.Labels["cluster"]))
+		clusterName := server.Labels["cluster"]
 		//getting the worker nodes of each k3d server
 		workers, err := docker.ContainerList(ctx, container.ListOptions{
 			All:     true,
@@ -131,25 +156,26 @@ func getClusters() (map[string]cluster, error) {
 		})
 		if err != nil {
 			// return nil, fmt.Errorf("WARNING: couldn't list worker containers for cluster %s\n%+v", server.Labels["cluster"], err)
-			log.Printf("WARNING: couldn't get worker containers for cluster %s\n%+v", server.Labels["cluster"], err)
+			log.Printf("WARNING: couldn't get worker containers for cluster %s\n%+v", clusterName, err)
 		}
 		serverPorts := []string{}
 		for _, port := range server.Ports {
 			serverPorts = append(serverPorts, strconv.Itoa(int(port.PublicPort)))
 		}
-		clusters[server.Labels["cluster"]] = cluster{
-			name:        server.Labels["cluster"],
+		clusters[clusterName] = cluster{
+			name:        clusterName,
 			image:       server.Image,
-			status:      server.State,
+			status:      getClusterStatus(server, workers),
 			serverPorts: serverPorts,
 			server:      server,
 			workers:     workers,
 		}
 		// clear label filters before searching for next cluster
-		filters.Del("label", fmt.Sprintf("cluster=%s", server.Labels["cluster"]))
+		filters.Del("label", fmt.Sprintf("cluster=%s", clusterName))
 	}
 	return clusters, nil
 }
+
 // getCluster creates a cluster struct with populated information fields
 func getCluster(name string) (cluster, error) {
 	// get all clusters
