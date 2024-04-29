@@ -101,7 +101,8 @@ func CreateCluster(c *cli.Context) error {
 	}
 
 	if c.IsSet("port") {
-		log.Println("WARNING: As of v2.0.0 --port will be used for arbitrary port-mappings. It's original functionality can then be used via --api-port.")
+		// log.Println("WARNING: As of v2.0.0 --port will be used for arbitrary port-mappings. It's original functionality can then be used via --api-port.")
+		log.Println("INFO: As of v2.0.0 --port will be used for arbitrary port mapping. Please use --api-port/-a instead for configuring the Api Port")
 	}
 
 	// constructs the arguments to be passed to the k3s server

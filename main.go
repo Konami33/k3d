@@ -56,7 +56,7 @@ func main() {
 				cli.IntFlag{
 					Name:  "port-auto-offset",
 					Value: 0,
-					Usage: "Automatically add an offset (+ worker number) to the chosen host port when using `--publish` to map the same container-port from multiple k3d workers to the host",
+					Usage: "Automatically add an offset (* worker number) to the chosen host port when using `--publish` to map the same container-port from multiple k3d workers to the host",
 				},
 				cli.StringFlag{
 					Name:  "version",
@@ -68,7 +68,8 @@ func main() {
 					// TODO: only --api-port, -a soon since we want to use --port, -p for the --publish/--add-port functionality
 					Name:  "api-port, a, port, p",
 					Value: 6443,
-					Usage: "Map the Kubernetes ApiServer port to a local port (Note: --port/-p will have different functionality as of v2.0.0)",
+					// Usage: "Map the Kubernetes ApiServer port to a local port (Note: --port/-p will have different functionality as of v2.0.0)",
+					Usage: "Map the Kubernetes ApiServer port to a local port (Note: --port/-p will be used for arbitrary port mapping as of v2.0.0, use --api-port/-a instead for setting the api port)",
 				},
 				//specify timeout time
 				cli.IntFlag{

@@ -3,7 +3,6 @@ package run
 import (
 	"fmt"
 	"log"
-	"regexp"
 	"strings"
 
 	"github.com/docker/go-connections/nat"
@@ -80,19 +79,19 @@ func CreatePublishedPorts(specs []string) (*PublishedPorts, error) {
 }
 
 // validatePortSpecs matches the provided port specs against a set of rules to enable early exit if something is wrong
-// specs represents the port mapping specifications
-//((?P<host>[\w\.]+)?:)?: This part matches an optional hostname followed by a colon. It captures the hostname in the group named host.
-// ((?P<hostPort>[0-9]{0,6}):)?: This part matches an optional host port followed by a colon. It captures the host port in the group named hostPort.
-// (?P<containerPort>[0-9]{1,6}): This part matches the container port. It captures the container port in the group named containerPort.
-// ((/(?P<protocol>udp|tcp))?(?P<nodes>(@(?P<node>[\w-]+))*)): This part matches the protocol (either udp or tcp) and any associated nodes. It captures the protocol in the group named protocol and the nodes in the group named nodes.
-
-// validatePortSpecs matches the provided port specs against a set of rules to enable early exit if something is wrong
 func validatePortSpecs(specs []string) error {
-	// regex matching (no sophisticated IP matching at the moment)
-	regex := regexp.MustCompile(`^(((?P<ip>[\d\.]+)?:)?((?P<hostPort>[0-9]{0,6}):)?(?P<containerPort>[0-9]{1,6}))((/(?P<protocol>udp|tcp))?(?P<nodes>(@(?P<node>[\w-]+))+))$`)
 	for _, spec := range specs {
-		if !regex.MatchString(spec) {
-			return fmt.Errorf("[ERROR] Provided port spec [%s] didn't match format specification (`[ip:][host-port:]container-port[/protocol]@node-specifier`)", spec)
+		atSplit := strings.Split(spec, "@")
+		_, err := nat.ParsePortSpec(atSplit[0])
+		if err != nil {
+			return fmt.Errorf("ERROR: Invalid port specification [%s] in port mapping [%s]\n%+v", atSplit[0], spec, err)
+		}
+		if len(atSplit) > 0 {
+			for i := 1; i < len(atSplit); i++ {
+				if err := ValidateHostname(atSplit[i]); err != nil {
+					return fmt.Errorf("ERROR: Invalid node-specifier [%s] in port mapping [%s]\n%+v", atSplit[i], spec, err)
+				}
+			}
 		}
 	}
 	return nil
@@ -135,7 +134,7 @@ func (p PublishedPorts) Offset(offset int) *PublishedPorts {
 		for i, b := range v {
 			port, _ := nat.ParsePort(b.HostPort)
 			bindings[i].HostIP = b.HostIP
-			bindings[i].HostPort = fmt.Sprintf("%d", port+offset)
+			bindings[i].HostPort = fmt.Sprintf("%d", port*offset) //offset multiplication
 		}
 		newPortBindings[k] = bindings
 	}
