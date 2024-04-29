@@ -84,11 +84,6 @@ func CreateCluster(c *cli.Context) error {
 	}
 	log.Printf("Created cluster network with ID %s", networkID)
 
-	// Check if the timeout flag is set but the wait flag is not, return an error if so
-	if c.IsSet("timeout") && !c.IsSet("wait") {
-		return errors.New("can not use --timeout flag without --wait flag")
-	}
-
 	// environment variables
 	env := []string{"K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml"}
 	if c.IsSet("env") || c.IsSet("e") {
@@ -157,9 +152,15 @@ func CreateCluster(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// check if --timeout flag is set. Log a message to show the deprecation
+	if c.IsSet("timeout") {
+		log.Println("[Warning] The --timeout flag is deprecated. use '--wait <timeout>' instead")
+	}
+
 	// wait for k3s to be up and running if we want it
 	start := time.Now()
-	timeout := time.Duration(c.Int("timeout")) * time.Second //timeout time calc
+	timeout := time.Duration(c.Int("wait")) * time.Second //timeout time calc
 
 	// infinite loop until wait is false
 	for c.IsSet("wait") {
