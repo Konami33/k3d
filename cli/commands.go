@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strconv"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	dockerClient "github.com/docker/docker/client"
 	"github.com/urfave/cli"
 )
@@ -48,8 +46,8 @@ func CreateCluster(c *cli.Context) error {
 	//handle cluster name
 	if err := CheckClusterName(c.String("name")); err != nil {
 		return err
-	}	
-	
+	}
+
 	// Check for cluster existence before using a name to create a new cluster
 	if cluster, err := getClusters(false, c.String("name")); err != nil {
 		return err
@@ -229,7 +227,7 @@ func CreateCluster(c *cli.Context) error {
 			)
 			if err != nil {
 				// if worker creation fails, delete the cluster and exit. Atomic creation
-				deleteCluster() // literal function 
+				deleteCluster() // literal function
 				return err
 			}
 			log.Printf("Created worker with ID %s\n", workerID)
@@ -247,7 +245,7 @@ kubectl cluster-info`, os.Args[0], c.String("name"))
 
 // DeleteCluster removes the cluster container and its cluster directory
 func DeleteCluster(c *cli.Context) error {
-	
+
 	clusters, err := getClusters(c.Bool("all"), c.String("name"))
 	if err != nil {
 		return err
@@ -289,7 +287,7 @@ func DeleteCluster(c *cli.Context) error {
 
 // StopCluster stops a running cluster container (restartable)
 func StopCluster(c *cli.Context) error {
-	
+
 	clusters, err := getClusters(c.Bool("all"), c.String("name"))
 	if err != nil {
 		return err
@@ -376,72 +374,32 @@ func ListClusters(c *cli.Context) error {
 
 // GetKubeConfig grabs the kubeconfig from the running cluster and prints the path to stdout
 func GetKubeConfig(c *cli.Context) error {
-	// sourcePath := fmt.Sprintf("k3d-%s-server:/output/kubeconfig.yaml", c.String("name"))
-	// destPath, _ := getClusterDir(c.String("name"))
-	// cmd := "docker"
-	// args := []string{"cp", sourcePath, destPath}
 
-	ctx := context.Background()
-	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
-	if err != nil {
-		return err
-	}
-
-	filters := filters.NewArgs()
-	filters.Add("label", "app=k3d")
-	filters.Add("label", fmt.Sprintf("cluster=%s", c.String("name")))
-	filters.Add("label", "component=server")
-
-	//ContainerList returns the list of containers/servers in the docker host.
-	server, err := docker.ContainerList(ctx, container.ListOptions{
-		Filters: filters,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to get server container for cluster %s\n%+v", c.String("name"), err)
-	}
-	if len(server) == 0 {
-		return fmt.Errorf("no server container for cluster %s", c.String("name"))
-	}
-
-	// get kubeconfig file from container and read contents
-	// CopyFromContainer gets the content from the container and returns it as a Reader for a TAR archive to manipulate it in the host.
-	// sourcePath := fmt.Sprintf("k3d-%s-server:/output/kubeconfig.yaml", c.String("name"))
-	// destPath, _ := getClusterDir(c.String("name"))
-	reader, _, err := docker.CopyFromContainer(ctx, server[0].ID, "/output/kubeconfig.yaml")
-	if err != nil {
-		return fmt.Errorf("ERROR: couldn't copy kubeconfig.yaml from server container %s\n%+v", server[0].ID, err)
-	}
-	// It's up to the caller to close the reader.
-	defer reader.Close()
-
-	// ReadAll reads from reader until an error or EOF and returns the data it read.
-	readBytes, err := io.ReadAll(reader)
-	if err != nil {
-		return fmt.Errorf("ERROR: couldn't read kubeconfig from container\n%+v", err)
-	}
-
+	cluster := c.String("name")
 	// create destination kubeconfig file
-	// getClusterDir returns the path to the cluster directory: $HOME/.config/k3d/<cluster_name>
-	destPath, err := getClusterKubeConfigPath(c.String("name"))
+	// destPath = getClusterDir + kubeconfig.yaml
+	// clusterDir = $HOME/.config/k3d/<cluster_name>
+	destPath, err := getClusterKubeConfigPath(cluster)
 	if err != nil {
 		return err
 	}
 
-	//Create creates or truncates the named file. If the file already exists, it is truncated. If the file does not exist, it is created with mode 0666 (before umask). If successful, methods on the returned File can be used for I/O;
-	kubeconfigfile, err := os.Create(destPath)
-	if err != nil {
-		return fmt.Errorf("ERROR: couldn't create kubeconfig.yaml in %s\n%+v", destPath, err)
+	if clusters, err := getClusters(false, cluster); err != nil || len(clusters) != 1 {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("cluster %s does not exist", cluster)
 	}
-	//Close closes the File, rendering it unusable for I/O.
-	// defer: Execute this line just before leaving the function."
-	defer kubeconfigfile.Close()
 
-	// write to file, skipping the first 512 bytes which contain file metadata and trimming any NULL characters
-	//Write writes len(b) bytes from b to the File. It returns the number of bytes written and an error, if any. Write returns a non-nil error when n != len(b).
-	//bytes.Trim(..., "\x00"): This function call trims any trailing NULL (\x00) characters from the sliced byte slice. It ensures that only valid data is written to the file.
-	_, err = kubeconfigfile.Write(bytes.Trim(readBytes[512:], "\x00"))
-	if err != nil {
-		return fmt.Errorf("ERROR: couldn't write to kubeconfig.yaml\n%+v", err)
+	// If kubeconfig.yaml has not been created, generate it now.
+	// IsNotExist returns a boolean indicating whether the error is known to report that a file or directory does not exist
+	// Stat returns a FileInfo describing the named file
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		if err = createKubeConfigFile(cluster); err != nil {
+			return err
+		}
+	} else {
+		return err
 	}
 
 	// output kubeconfig file path to stdout
