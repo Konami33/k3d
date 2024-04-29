@@ -76,6 +76,8 @@ func printClusters(all bool) {
 
 	//creating a table output with header name, image, status
 	table := tablewriter.NewWriter(os.Stdout)
+	// align the output table into the center
+	table.SetAlignment(tablewriter.ALIGN_CENTER)
 	table.SetHeader([]string{"NAME", "IMAGE", "STATUS", "WORKERS"})
 
 	for _, cluster := range clusters {
@@ -94,32 +96,6 @@ func printClusters(all bool) {
 	}
 	table.Render()
 }
-
-// getClusterNames returns a list of cluster names which are folder names in the config directory
-// func getClusterNames() ([]string, error) {
-// 	homeDir, err := homedir.Dir()
-// 	if err != nil {
-// 		log.Printf("ERROR: Couldn't get user's home directory")
-// 		return nil, err
-// 	}
-// 	configDir := path.Join(homeDir, ".config", "k3d")
-// 	files, err := os.ReadDir(configDir)
-// 	if err != nil {
-// 		log.Printf("ERROR: Couldn't list files in [%s]", configDir)
-// 		return nil, err
-// 	}
-// 	clusters := []string{}
-// 	for _, file := range files {
-// 		if file.IsDir() {
-// 			clusters = append(clusters, file.Name())
-// 		}
-// 	}
-// 	return clusters, nil
-// }
-
-// returns information about a specific cluster
-// takes cluster name as input and returns cluster struct containing details(name, image, status)
-// if any error occcured, returns error
 func getClusters() (map[string]cluster, error) {
 
 	ctx := context.Background()

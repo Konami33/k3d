@@ -126,7 +126,13 @@ func CreateCluster(c *cli.Context) error {
 		portmap,
 	)
 	if err != nil {
-		log.Fatalf("ERROR: failed to create cluster\n%+v", err)
+		log.Printf("ERROR: failed to create cluster\n%+v", err)
+		// Delete cluster if it is not started due to port confliction or any other unseen reason
+		delErr := DeleteCluster(c)
+		if delErr != nil {
+			return delErr
+		}
+		os.Exit(1)
 	}
 	ctx := context.Background()
 	// dockerClient provides a client library for interacting with the Docker Engine API
