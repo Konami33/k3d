@@ -10,3 +10,39 @@ Solution:
 2. Worker is created but automatically stops after a few seconds. This error will show in the log file: level=fatal msg="--token is required"
 Solution:
     Initialize k3sClusterSecrete and k3sToken. 
+
+3. Volume leak after deleting container.(Container.go --> removeContainer())
+Solution:
+    Automatically reclaim k3s container volumes after a cluster is deleted
+
+    Thanks @zeerorg for the suggestion on possible container volume leak.
+
+    With out this fix the k3s container volumes are left in the reclaimable
+    state. This experiment confirms it:
+
+    $ docker system df
+    TYPE                TOTAL               ACTIVE              SIZE                RECLAIMABLE
+    Images              14                  0                   2.131GB             2.131GB (100%)
+    Containers          0                   0                   0B                  0B
+    Local Volumes       0                   0                   0B                  0B
+    Build Cache         0                   0                   0B                  0B
+
+    $ bin/k3d create; sleep 5; bin/k3d delete
+
+    $ docker system df
+    TYPE                TOTAL               ACTIVE              SIZE                RECLAIMABLE
+    Images              14                  0                   2.131GB             2.131GB (100%)
+    Containers          0                   0                   0B                  0B
+    Local Volumes       3                   0                   2.366MB             2.366MB (100%)
+    Build Cache         0                   0                   0B                  0B
+
+    In this case, 2.36MB are left in the reclaimable state. This number can be
+    larger with a larger cluster.
+
+    With this fix, output of "docker system df" does not contain the
+    claimable volume
+    TYPE                TOTAL               ACTIVE              SIZE                RECLAIMABLE
+    Images              14                  0                   2.131GB             2.131GB (100%)
+    Containers          0                   0                   0B                  0B
+    Local Volumes       0                   0                   0B                  0B
+    Build Cache         0                   0                   0B                  0B

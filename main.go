@@ -43,9 +43,10 @@ func main() {
 					Value: defaultK3sClusterName,
 					Usage: "Set a name for the cluster",
 				},
-				cli.StringFlag{
+				// Most k3d arguments are using in "stringSlice" style, allowing the argument to supplied multiple times. Previously used string separated by ","
+				cli.StringSliceFlag{
 					Name:  "volume, v",
-					Usage: "Mount one or more volumes into every node of the cluster (Docker notation: `source:destination[,source:destination]`",
+					Usage: "Mount one or more volumes into every node of the cluster (Docker notation: `source:destination`)",
 				},
 				// node specifier flags
 				// usage: --publish 80:8080/tcp@worker-1

@@ -88,8 +88,8 @@ func getClusterDir(name string) (string, error) {
 }
 
 // printClusters prints the names of existing clusters
-func printClusters(all bool) {
-	clusters, err := getClusters()
+func printClusters() {
+	clusters, err := getClusters(true, "")
 	if err != nil {
 		log.Fatalf("ERROR: Couldn't list clusters\n%+v", err)
 	}
@@ -104,8 +104,6 @@ func printClusters(all bool) {
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 	table.SetHeader([]string{"NAME", "IMAGE", "STATUS", "WORKERS"})
 
-	tableEmplty := true
-
 	for _, cluster := range clusters {
 		workersRunning := 0
 		for _, worker := range cluster.workers {
@@ -116,14 +114,10 @@ func printClusters(all bool) {
 		workerData := fmt.Sprintf("%d/%d", workersRunning, len(cluster.workers))
 		clusterData := []string{cluster.name, cluster.image, cluster.status, workerData}
 
-		if cluster.status == "running" || all {
-			table.Append(clusterData)
-			tableEmplty = false
-		}
+		// list all the clusters whether they are running or not or all flag is specified
+		table.Append(clusterData)
 	}
-	if !tableEmplty {
-		table.Render()
-	}
+	table.Render()
 }
 
 // Classify cluster state: Running, Stopped or Abnormal
@@ -144,7 +138,10 @@ func getClusterStatus(server types.Container, workers []types.Container) string 
 	return server.State
 }
 
-func getClusters() (map[string]cluster, error) {
+// When 'all' is true, 'cluster' contains all clusters found from the docker daemon
+// When 'all' is false, 'cluster' contains up to one cluster whose name matches 'name'. 'cluster' can
+// be empty if no matching cluster is found.
+func getClusters(all bool, name string) (map[string]cluster, error) {
 
 	ctx := context.Background()
 	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
@@ -171,39 +168,36 @@ func getClusters() (map[string]cluster, error) {
 	filters.Add("label", "component=worker")
 
 	for _, server := range k3dServers {
-		filters.Add("label", fmt.Sprintf("cluster=%s", server.Labels["cluster"]))
+		//filters.Add("label", fmt.Sprintf("cluster=%s", server.Labels["cluster"]))
 		clusterName := server.Labels["cluster"]
-		//getting the worker nodes of each k3d server
-		workers, err := docker.ContainerList(ctx, container.ListOptions{
-			All:     true,
-			Filters: filters,
-		})
-		if err != nil {
-			// return nil, fmt.Errorf("WARNING: couldn't list worker containers for cluster %s\n%+v", server.Labels["cluster"], err)
-			log.Printf("WARNING: couldn't get worker containers for cluster %s\n%+v", clusterName, err)
+
+		// get all the clusters if all flag is set or if name is equal to the clusterName otherwise skip
+		if all || name == clusterName {
+			filters.Add("label", fmt.Sprintf("cluster=%s", clusterName))
+			//getting the worker nodes of each k3d server
+			workers, err := docker.ContainerList(ctx, container.ListOptions{
+				All:     true,
+				Filters: filters,
+			})
+			if err != nil {
+				// return nil, fmt.Errorf("WARNING: couldn't list worker containers for cluster %s\n%+v", server.Labels["cluster"], err)
+				log.Printf("WARNING: couldn't get worker containers for cluster %s\n%+v", clusterName, err)
+			}
+			serverPorts := []string{}
+			for _, port := range server.Ports {
+				serverPorts = append(serverPorts, strconv.Itoa(int(port.PublicPort)))
+			}
+			clusters[clusterName] = cluster{
+				name:        clusterName,
+				image:       server.Image,
+				status:      getClusterStatus(server, workers),
+				serverPorts: serverPorts,
+				server:      server,
+				workers:     workers,
+			}
+			// clear label filters before searching for next cluster
+			filters.Del("label", fmt.Sprintf("cluster=%s", clusterName))
 		}
-		serverPorts := []string{}
-		for _, port := range server.Ports {
-			serverPorts = append(serverPorts, strconv.Itoa(int(port.PublicPort)))
-		}
-		clusters[clusterName] = cluster{
-			name:        clusterName,
-			image:       server.Image,
-			status:      getClusterStatus(server, workers),
-			serverPorts: serverPorts,
-			server:      server,
-			workers:     workers,
-		}
-		// clear label filters before searching for next cluster
-		filters.Del("label", fmt.Sprintf("cluster=%s", clusterName))
 	}
 	return clusters, nil
-}
-
-// getCluster creates a cluster struct with populated information fields
-func getCluster(name string) (cluster, error) {
-	// get all clusters
-	clusters, err := getClusters()
-	//return the cluster with specified name
-	return clusters[name], err
 }

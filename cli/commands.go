@@ -48,6 +48,14 @@ func CreateCluster(c *cli.Context) error {
 	//handle cluster name
 	if err := CheckClusterName(c.String("name")); err != nil {
 		return err
+	}	
+	
+	// Check for cluster existence before using a name to create a new cluster
+	if cluster, err := getClusters(false, c.String("name")); err != nil {
+		return err
+	} else if len(cluster) != 0 {
+		// A cluster exists with the same name. Return with an error.
+		return fmt.Errorf("ERROR: Cluster %s already exists", c.String("name"))
 	}
 
 	// define image
@@ -130,7 +138,7 @@ func CreateCluster(c *cli.Context) error {
 		k3sServerArgs,
 		env,
 		c.String("name"),
-		strings.Split(c.String("volume"), ","), //value: "dir1:mount1,dir2:mount2" --> []string{"dir1:mount1", "dir2:mount2"}
+		c.StringSlice("volume"),
 		portmap,
 	)
 	if err != nil {
@@ -209,7 +217,7 @@ func CreateCluster(c *cli.Context) error {
 				k3sWorkerArgs,
 				env,
 				c.String("name"),
-				strings.Split(c.String("volume"), ","),
+				c.StringSlice("volume"),
 				i, //postfix
 				c.String("api-port"),
 				portmap, // All ports exposed by --publish will also be exported for all worker
@@ -233,27 +241,13 @@ kubectl cluster-info`, os.Args[0], c.String("name"))
 
 // DeleteCluster removes the cluster container and its cluster directory
 func DeleteCluster(c *cli.Context) error {
-	//creating cluster map name-->cluster struct
-	clusters := make(map[string]cluster)
-	// if not all get specified cluster
-
-	if !c.Bool("all") {
-		cluster, err := getCluster(c.String("name"))
-		if err != nil {
-			return err
-		}
-		clusters[c.String("name")] = cluster
-	} else {
-		clusterMap, err := getClusters()
-		if err != nil {
-			return fmt.Errorf("ERROR: `--all` specified, but no clusters were found\n%+v", err)
-		}
-		// copy clusterMap into the clusters
-		for k, v := range clusterMap {
-			clusters[k] = v
-		}
+	
+	clusters, err := getClusters(c.Bool("all"), c.String("name"))
+	if err != nil {
+		return err
 	}
 
+	// remove cluster one by one
 	for _, cluster := range clusters {
 		log.Printf("Removing cluster [%s]", cluster.name)
 		// first delete workder node
@@ -289,26 +283,10 @@ func DeleteCluster(c *cli.Context) error {
 
 // StopCluster stops a running cluster container (restartable)
 func StopCluster(c *cli.Context) error {
-	// operate on one or all clusters
-	clusters := make(map[string]cluster)
-	// handle --all flag
-	if !c.Bool("all") {
-		//getCluster returns a single cluster struct with populated information fields with the specified name
-		cluster, err := getCluster(c.String("name"))
-		if err != nil {
-			return err
-		}
-		clusters[c.String("name")] = cluster
-	} else {
-		// retuns all the cluster
-		clusterMap, err := getClusters()
-		if err != nil {
-			return fmt.Errorf("ERROR: `--all` specified, but no clusters were found\n%+v", err)
-		}
-		// copy clusterMap into clusters
-		for k, v := range clusterMap {
-			clusters[k] = v
-		}
+	
+	clusters, err := getClusters(c.Bool("all"), c.String("name"))
+	if err != nil {
+		return err
 	}
 
 	ctx := context.Background()
@@ -345,22 +323,10 @@ func StopCluster(c *cli.Context) error {
 
 // StartCluster starts a stopped cluster container
 func StartCluster(c *cli.Context) error {
-	clusters := make(map[string]cluster)
+	clusters, err := getClusters(c.Bool("all"), c.String("name"))
 
-	if !c.Bool("all") {
-		cluster, err := getCluster(c.String("name"))
-		if err != nil {
-			return err
-		}
-		clusters[c.String("name")] = cluster
-	} else {
-		clusterMap, err := getClusters()
-		if err != nil {
-			return fmt.Errorf("ERROR: `--all` specified, but no clusters were found\n%+v", err)
-		}
-		for name, cluster := range clusterMap {
-			clusters[name] = cluster
-		}
+	if err != nil {
+		return err
 	}
 
 	ctx := context.Background()
@@ -395,7 +361,10 @@ func StartCluster(c *cli.Context) error {
 
 // ListClusters prints a list of created clusters
 func ListClusters(c *cli.Context) error {
-	printClusters(c.Bool("all"))
+	if c.IsSet("all") {
+		log.Println("INFO: --all is on by default, thus no longer required. This option will be removed in v2.0.0")
+	}
+	printClusters()
 	return nil
 }
 

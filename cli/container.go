@@ -223,7 +223,11 @@ func removeContainer(ID string) error {
 		return fmt.Errorf("ERROR: couldn't create docker client\n%+v", err)
 	}
 	//always force delete
-	if err := docker.ContainerRemove(ctx, ID, container.RemoveOptions{Force: true}); err != nil {
+	if err := docker.ContainerRemove(ctx, ID, container.RemoveOptions{
+		// Automatically reclaim k3s container volumes after a cluster is deleted
+		RemoveVolumes: true,
+		Force: true,
+	}); err != nil {
 		return fmt.Errorf("FAILURE: couldn't delete container [%s] -> %+v", ID, err)
 	}
 	return nil

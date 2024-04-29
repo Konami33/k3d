@@ -15,12 +15,12 @@ type PublishedPorts struct {
 }
 
 // defaultNodes describes the type of nodes on which a port should be exposed by default
-const defaultNodes = "all"
+const defaultNodes = "server"
 
 // mapping a node role to groups that should be applied to it
 var nodeRuleGroupsMap = map[string][]string{
-	"worker": []string{"all", "workers"},
-	"server": []string{"all", "server", "master"},
+	"worker": {"all", "workers"},
+	"server": {"all", "server", "master"},
 }
 
 // mapNodesToPortSpecs maps nodes to portSpecs
@@ -39,6 +39,9 @@ func mapNodesToPortSpecs(specs []string, createdNodes []string) (map[string][]st
 	for _, spec := range specs {
 		// extractNodes returns a list of nodes and the port specification
 		nodes, portSpec := extractNodes(spec)
+		if len(nodes) == 0 {
+			nodes = append(nodes, defaultNodes)
+		}
 
 		for _, node := range nodes {
 			// each node is mapped to a slice of port specifications.
@@ -79,9 +82,11 @@ func CreatePublishedPorts(specs []string) (*PublishedPorts, error) {
 }
 
 // validatePortSpecs matches the provided port specs against a set of rules to enable early exit if something is wrong
+// example: specs := []string{"8080:80@worker-1@worker-2}
+// validatePortSpecs returns an error if any of the port specs are invalid
 func validatePortSpecs(specs []string) error {
 	for _, spec := range specs {
-		atSplit := strings.Split(spec, "@")
+		atSplit := strings.Split(spec, "@") // {"8080:80", "worker-1", "worker-2", ....}
 		_, err := nat.ParsePortSpec(atSplit[0])
 		if err != nil {
 			return fmt.Errorf("ERROR: Invalid port specification [%s] in port mapping [%s]\n%+v", atSplit[0], spec, err)
@@ -138,7 +143,6 @@ func (p PublishedPorts) Offset(offset int) *PublishedPorts {
 		}
 		newPortBindings[k] = bindings
 	}
-
 	return &PublishedPorts{ExposedPorts: newExposedPorts, PortBindings: newPortBindings}
 }
 
