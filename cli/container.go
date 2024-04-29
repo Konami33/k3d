@@ -64,7 +64,7 @@ func startContainer(verbose bool, config *container.Config, hostConfig *containe
 	return resp.ID, nil
 }
 
-func createServer(verbose bool, image string, apiPort string, args []string, env []string, name string, volumes []string, nodeToPortSpecMap map[string][]string) (string, error) {
+func createServer(verbose bool, image string, apiPort string, args []string, env []string, name string, volumes []string, nodeToPortSpecMap map[string][]string, autoRestart bool) (string, error) {
 	log.Printf("Creating server using %s...\n", image)
 
 	containerLabels := make(map[string]string)
@@ -99,6 +99,11 @@ func createServer(verbose bool, image string, apiPort string, args []string, env
 		// Value = []nat.PortBinding. Represents the port on the host machine. Each nat.PortBinding struct specifies the mapping of a container port to a host port.
 		PortBindings: serverPublishedPorts.PortBindings,
 		Privileged:   true,
+	}
+
+	// keep the container running even after the docker daemon restart. Stop when container.stop
+	if autoRestart {
+		hostConfig.RestartPolicy.Name = "unless-stopped"
 	}
 
 	//handle volume
@@ -136,7 +141,7 @@ func createServer(verbose bool, image string, apiPort string, args []string, env
 }
 
 // creating worker node
-func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix int, serverPort string, nodeToPortSpecMap map[string][]string, portAutoOffset int) (string, error) {
+func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix int, serverPort string, nodeToPortSpecMap map[string][]string, portAutoOffset int, autoRestart bool) (string, error) {
 
 	//create the container basic info
 	containerLabels := make(map[string]string)
@@ -185,6 +190,10 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 		//problem
 		PortBindings: workerPublishedPorts.PortBindings,
 		Privileged:   true,
+	}
+
+	if autoRestart {
+		hostConfig.RestartPolicy.Name = "unless-stopped"
 	}
 
 	if len(volumes) > 0 && volumes[0] != "" {

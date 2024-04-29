@@ -106,6 +106,12 @@ func main() {
 					Value: 0,
 					Usage: "Specify how many worker nodes you want to spawn",
 				},
+				//When creating clusters with the --auto-restart flag, any running cluster
+				//will remain "running" up on docker daemon restart.
+				cli.BoolFlag{
+					Name:  "auto-restart",
+					Usage: "Set docker's --restart=unless-stopped flag on the containers",
+				},
 			},
 			Action: run.CreateCluster,
 		},

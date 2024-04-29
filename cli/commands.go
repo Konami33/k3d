@@ -135,6 +135,7 @@ func CreateCluster(c *cli.Context) error {
 		c.String("name"),
 		c.StringSlice("volume"),
 		portmap,
+		c.Bool("auto-restart"), // remain "running" up on docker daemon restart.
 	)
 	if err != nil {
 		log.Printf("ERROR: failed to create cluster\n%+v", err)
@@ -223,6 +224,7 @@ func CreateCluster(c *cli.Context) error {
 				c.String("api-port"),
 				portmap, // All ports exposed by --publish will also be exported for all worker
 				c.Int("port-auto-offset"),
+				c.Bool("auto-restart"), // remain "running" up on docker daemon restart.
 			)
 			if err != nil {
 				// if worker creation fails, delete the cluster and exit. Atomic creation
