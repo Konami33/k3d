@@ -93,11 +93,9 @@ func CreateCluster(c *cli.Context) error {
 
 	// environment variables
 	env := []string{"K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml"}
-	if c.IsSet("env") || c.IsSet("e") {
-		env = append(env, c.StringSlice("env")...)
-	}
+	env = append(env, c.StringSlice("env")...)
 
-	// clusterSecret and token is a must. otherwise we can't join the cluster
+	// clusterSecret and token is a must. otherwise we can't join the server with workers
 	k3sClusterSecret := ""
 	k3sToken := ""
 
@@ -210,6 +208,8 @@ func CreateCluster(c *cli.Context) error {
 		k3sWorkerArgs := []string{}
 		// appending the k3sClusterSecret and k3sToke to env variable
 		env := []string{k3sClusterSecret, k3sToken}
+		// passing the environment variables to the workers
+		env = append(env, c.StringSlice("env")...)
 		log.Printf("Booting %s workers for cluster %s", strconv.Itoa(c.Int("workers")), c.String("name"))
 		for i := 0; i < c.Int("workers"); i++ {
 			workerID, err := createWorker(
@@ -387,7 +387,11 @@ func GetKubeConfig(c *cli.Context) error {
 	fmt.Println(kubeConfigPath)
 	return nil
 }
-//Bash function
+
+// Bash function
 func Shell(c *cli.Context) error {
+	if c.String("shell") != "bash" {
+		return fmt.Errorf("%s is not supported. Only bash is supported", c.String("shell"))
+	}
 	return bashShell(c.String("name"), c.String("command"))
 }
