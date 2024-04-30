@@ -4,9 +4,45 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 )
 
-func bashShell(cluster string, command string) error {
+var shells = map[string]map[string][]string{
+	"bash": {
+		"options": []string{
+			"--noprofile", // don't load .profile/.bash_profile
+			"--norc",      // don't load .bashrc
+		},
+	},
+	"zsh": {
+		"options": []string{
+			"--no-rcs", // don't load .zshrc
+		},
+	},
+}
+
+func shell(cluster string, shell string, command string) error {
+
+	// check if the selected shell is supported
+	if shell == "auto" {
+		// get the shell from the SHELL environment variable
+		// if the SHELL environment variable is not set, use the default shell
+		// Base returns the last element of path.
+		// Trailing path separators are removed before extracting the last element.
+		shell = path.Base(os.Getenv("SHELL"))
+	}
+
+	supported := false
+	// check if the selected shell is supported	
+	for supportedShell := range shells {
+		if supportedShell == shell {
+			supported = true
+		}
+	}
+	if !supported {
+		return fmt.Errorf("ERROR: selected shell [%s] is not supported", shell)
+	}
+
 	kubeConfigPath, err := getKubeConfig(cluster)
 	if err != nil {
 		return err
@@ -23,7 +59,7 @@ func bashShell(cluster string, command string) error {
 	// LookPath searches for an executable named file in the directories named by the $PATH environment variable. LookPath also uses $PATHEXT environment variable to match a suitable candidate.
 	// If a match is found, LookPath returns the absolute pathname of the executable file.
 	// If no match is found, LookPath returns the string "", and err is set to os.ErrNotExist.
-	bashPath, err := exec.LookPath("bash")
+	shellPath, err := exec.LookPath(shell)
 	if err != nil {
 		return err
 	}
@@ -33,7 +69,10 @@ func bashShell(cluster string, command string) error {
 	// "--norc": It instructs Bash not to read the user's ~/.bashrc file. Similar to --noprofile, it helps start Bash more quickly without loading additional configurations.
 	// Command returns the Cmd struct to execute the named program with the given arguments. It sets only the Path and Args in the returned structure.
 
-	cmd := exec.Command(bashPath, "--noprofile", "--norc")
+	// set shell specific options (command line flags)
+	// if shell == "bash" then shellOptions = --noprofile --norc
+	shellOptions := shells[shell]["options"]
+	cmd := exec.Command(shellPath, shellOptions...)
 
 	if len(command) > 0 {
 		//  k3d bash -c 'kubectl cluster-info'
