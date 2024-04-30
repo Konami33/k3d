@@ -12,6 +12,13 @@ func bashShell(cluster string, command string) error {
 		return err
 	}
 
+	// ExpandEnv replaces ${var} or $var in the string according to the values of the current environment variables. References to undefined variables are replaced by the empty string.
+	//this code prevents the execution of further actions that would start a new subshell of a k3d cluster if the current shell session is already in a subshell of a k3d cluster, ensuring that the user does not unintentionally create nested subshells.
+	subShell := os.ExpandEnv("$__K3D_CLUSTER__")
+	if len(subShell) > 0 {
+		return fmt.Errorf("[ERROR]: Already in subshell of cluster %s", subShell)
+	}
+
 	// find out the bash path
 	// LookPath searches for an executable named file in the directories named by the $PATH environment variable. LookPath also uses $PATHEXT environment variable to match a suitable candidate.
 	// If a match is found, LookPath returns the absolute pathname of the executable file.
@@ -42,13 +49,18 @@ func bashShell(cluster string, command string) error {
 	//Getenv retrieves the value of the environment variable named by the key.
 	// In Bash, PS1 is an environment variable that defines the format of the primary prompt displayed to the user. Includes information such as the username, hostname, current directory, and other relevant details.
 	// "PS1=\[%s}%s": Format of the string. Sets PS1 to a custom value. The \[ and \] are escape sequences in Bash that denote non-printing characters, which is often used for colorizing the prompt.
+	// The resulting prompt will display the cluster name alongside the existing prompt string.
+	// see more: https://linuxsimply.com/bash-scripting-tutorial/variables/types/ps1/
 	setPS1 := fmt.Sprintf("PS1=[%s}%s", cluster, os.Getenv("PS1"))
 
 	// Set up KUBECONFIG
 	setKube := fmt.Sprintf("KUBECONFIG=%s", kubeConfigPath)
+	// creating an environment variable __K3D_CLUSTER__=cluster
+	subShell = fmt.Sprintf("__K3D_CLUSTER__=%s", cluster)
 	// Environ returns a copy of strings representing the environment, in the form "key=value".
-	newEnv := append(os.Environ(), setPS1, setKube)
-
+	// adding the environment variables to the newEnv
+	newEnv := append(os.Environ(), setPS1, setKube, subShell)
+	// Set up environment of the cmd
 	cmd.Env = newEnv
 
 	return cmd.Run()
