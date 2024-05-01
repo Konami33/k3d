@@ -14,15 +14,23 @@ import (
 	dockerClient "github.com/docker/docker/client"
 )
 
-// To do: update this function and solve why the package function is not working
-//
-//	func IsImageNotFoundError(err error) bool {
-//		// Check if the error message contains a string indicating that the image is not found
-//		return strings.Contains(err.Error(), "No such image") || strings.Contains(err.Error(), "not found")
-//	}
-func startContainer(verbose bool, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, containerName string) (string, error) {
-	ctx := context.Background()
+type ClusterSpec struct {
+	AgentArgs         []string
+	ApiPort           string
+	AutoRestart       bool
+	ClusterName       string
+	Env               []string
+	Image             string
+	NodeToPortSpecMap map[string][]string
+	PortAutoOffset    int
+	ServerArgs        []string
+	Verbose           bool
+	Volumes           []string
+}
 
+func startContainer(verbose bool, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, containerName string) (string, error) {
+
+	ctx := context.Background()
 	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
 	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't create docker client\n%+v", err)
@@ -64,27 +72,27 @@ func startContainer(verbose bool, config *container.Config, hostConfig *containe
 	return resp.ID, nil
 }
 
-func createServer(verbose bool, image string, apiPort string, args []string, env []string, name string, volumes []string, nodeToPortSpecMap map[string][]string, autoRestart bool) (string, error) {
-	log.Printf("Creating server using %s...\n", image)
+func createServer(spec *ClusterSpec) (string, error) {
+	log.Printf("Creating server using %s...\n", spec.Image)
 
 	containerLabels := make(map[string]string)
 	containerLabels["app"] = "k3d"
 	containerLabels["component"] = "server"
 	containerLabels["created"] = time.Now().Format("2006-01-02 15:04:05")
-	containerLabels["cluster"] = name
+	containerLabels["cluster"] = spec.ClusterName
 
 	//containerName := fmt.Sprintf("k3d-%s-server", name)
-	containerName := GetContainerName("server", name, -1)
+	containerName := GetContainerName("server", spec.ClusterName, -1)
 
 	// ports to be assigned to the server belong to roles
 	// all, server or <server-container-name>
-	serverPorts, err := MergePortSpecs(nodeToPortSpecMap, "server", containerName)
+	serverPorts, err := MergePortSpecs(spec.NodeToPortSpecMap, "server", containerName)
 	if err != nil {
 		return "", err
 	}
 
 	//problem
-	apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", apiPort, apiPort)
+	apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", spec.ApiPort, spec.ApiPort)
 	
 	serverPorts = append(serverPorts, apiPortSpec)
 	serverPublishedPorts, err := CreatePublishedPorts(serverPorts)
@@ -102,19 +110,19 @@ func createServer(verbose bool, image string, apiPort string, args []string, env
 	}
 
 	// keep the container running even after the docker daemon restart. Stop when container.stop
-	if autoRestart {
+	if spec.AutoRestart {
 		hostConfig.RestartPolicy.Name = "unless-stopped"
 	}
 
 	//handle volume
-	if len(volumes) > 0 && volumes[0] != "" {
-		hostConfig.Binds = volumes
+	if len(spec.Volumes) > 0 && spec.Volumes[0] != "" {
+		hostConfig.Binds = spec.Volumes
 	}
 
 	//networkingConfig
 	networkingConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			k3dNetworkName(name): {
+			k3dNetworkName(spec.ClusterName): {
 				Aliases: []string{containerName},
 			},
 		},
@@ -123,16 +131,16 @@ func createServer(verbose bool, image string, apiPort string, args []string, env
 	// Config contains the configuration data about a container. It should hold only portable information about the container. Here, "portable" means "independent from the host we are running on"
 	config := &container.Config{
 		Hostname:     containerName,
-		Image:        image,
-		Cmd:          append([]string{"server"}, args...),
+		Image:        spec.Image,
+		Cmd:          append([]string{"server"}, spec.ServerArgs...),
 		ExposedPorts: serverPublishedPorts.ExposedPorts,
-		Env:          env,
+		Env:          spec.Env,
 		Labels:       containerLabels,
 	}
 	// image format
 	fmt.Println(config.Image)
 	//contianer creattion response ie resp.ID
-	id, err := startContainer(verbose, config, hostConfig, networkingConfig, containerName)
+	id, err := startContainer(spec.Verbose, config, hostConfig, networkingConfig, containerName)
 	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't create container %s\n%+v", containerName, err)
 	}
@@ -141,19 +149,19 @@ func createServer(verbose bool, image string, apiPort string, args []string, env
 }
 
 // creating worker node
-func createWorker(verbose bool, image string, args []string, env []string, name string, volumes []string, postfix int, serverPort string, nodeToPortSpecMap map[string][]string, portAutoOffset int, autoRestart bool) (string, error) {
+func createWorker(spec *ClusterSpec, postfix int) (string, error) {
 
 	//create the container basic info
 	containerLabels := make(map[string]string)
 	containerLabels["app"] = "k3d"
 	containerLabels["component"] = "worker"
 	containerLabels["created"] = time.Now().Format("2006-01-02 15:04:05")
-	containerLabels["cluster"] = name
+	containerLabels["cluster"] = spec.ClusterName
 
 	//containerName := fmt.Sprintf("k3d-%s-worker-%d", name, postfix)
-	containerName := GetContainerName("worker", name, postfix)
+	containerName := GetContainerName("worker", spec.ClusterName, postfix)
 
-	env = append(env, fmt.Sprintf("K3S_URL=https://k3d-%s-server:%s", name, serverPort))
+	spec.Env = append(spec.Env, fmt.Sprintf("K3S_URL=https://k3d-%s-server:%s", spec.ClusterName, spec.ApiPort))
 
 	// k3d create --publish  80:80  --publish 90:90/udp --workers 1
 	// The exposed ports will be:
@@ -162,7 +170,7 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 
 	// ports to be assigned to the server belong to roles
 	// all, server or <server-container-name>
-	workerPorts, err := MergePortSpecs(nodeToPortSpecMap, "worker", containerName)
+	workerPorts, err := MergePortSpecs(spec.NodeToPortSpecMap, "worker", containerName)
 	fmt.Printf("%s -> ports: %+v\n", containerName, workerPorts)
 	if err != nil {
 		return "", err
@@ -172,9 +180,9 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 		return "", err
 	}
 	//workerPublishedPorts = workerPublishedPorts.Offset(postfix + 1)
-	if portAutoOffset > 0 {
+	if spec.PortAutoOffset > 0 {
 		// TODO: add some checks before to print a meaningful log message saying that we cannot map multiple container ports to the same host port without a offset
-		workerPublishedPorts = workerPublishedPorts.Offset(postfix + portAutoOffset)
+		workerPublishedPorts = workerPublishedPorts.Offset(postfix + spec.PortAutoOffset)
 	}
 
 	hostConfig := &container.HostConfig{
@@ -192,17 +200,17 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 		Privileged:   true,
 	}
 
-	if autoRestart {
+	if spec.AutoRestart {
 		hostConfig.RestartPolicy.Name = "unless-stopped"
 	}
 
-	if len(volumes) > 0 && volumes[0] != "" {
-		hostConfig.Binds = volumes
+	if len(spec.Volumes) > 0 && spec.Volumes[0] != "" {
+		hostConfig.Binds = spec.Volumes
 	}
 
 	networkingConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			k3dNetworkName(name): {
+			k3dNetworkName(spec.ClusterName): {
 				Aliases: []string{containerName},
 			},
 		},
@@ -210,13 +218,13 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 
 	config := &container.Config{
 		Hostname:     containerName,
-		Image:        image,
-		Env:          env,
+		Image:        spec.Image,
+		Env:          spec.Env,
 		Labels:       containerLabels,
 		ExposedPorts: workerPublishedPorts.ExposedPorts,
 	}
 
-	id, err := startContainer(verbose, config, hostConfig, networkingConfig, containerName)
+	id, err := startContainer(spec.Verbose, config, hostConfig, networkingConfig, containerName)
 	if err != nil {
 		return "", fmt.Errorf("ERROR: couldn't start container %s\n%+v", containerName, err)
 	}

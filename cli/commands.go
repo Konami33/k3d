@@ -99,14 +99,10 @@ func CreateCluster(c *cli.Context) error {
 	k3sClusterSecret := ""
 	k3sToken := ""
 
-	//if worker node is set append the cluster secret and token to the environment variables
-	if c.Int("workers") > 0 {
-		k3sClusterSecret = fmt.Sprintf("K3S_CLUSTER_SECRET=%s", GenerateRandomString(20))
-		env = append(env, k3sClusterSecret)
-
-		k3sToken = fmt.Sprintf("K3S_TOKEN=%s", GenerateRandomString(20))
-		env = append(env, k3sToken)
-	}
+	//The cluster secret and token to the environment variables
+	k3sClusterSecret = fmt.Sprintf("K3S_CLUSTER_SECRET=%s", GenerateRandomString(20))
+	k3sToken = fmt.Sprintf("K3S_TOKEN=%s", GenerateRandomString(20))
+	env = append(env, k3sClusterSecret, k3sToken)
 
 	if c.IsSet("port") {
 		// log.Println("WARNING: As of v2.0.0 --port will be used for arbitrary port-mappings. It's original functionality can then be used via --api-port.")
@@ -134,6 +130,20 @@ func CreateCluster(c *cli.Context) error {
 		log.Fatal(err)
 	}
 
+	clusterSpec := &ClusterSpec{
+		AgentArgs:         []string{},
+		ApiPort:           c.String("api-port"),
+		AutoRestart:       c.Bool("auto-restart"),
+		ClusterName:       c.String("name"),
+		Env:               env,
+		Image:             image,
+		NodeToPortSpecMap: portmap,
+		PortAutoOffset:    c.Int("port-auto-offset"),
+		ServerArgs:        k3sServerArgs,
+		Verbose:           c.GlobalBool("verbose"),
+		Volumes:           c.StringSlice("volume"),
+	}
+
 	// let's go
 	log.Printf("Creating cluster [%s]", c.String("name"))
 
@@ -141,17 +151,7 @@ func CreateCluster(c *cli.Context) error {
 	// createServer creates a new server container
 	// dockerID is the ID of the container
 	// container.go -> createServer()
-	dockerID, err := createServer(
-		c.GlobalBool("verbose"),
-		image,
-		c.String("api-port"),
-		k3sServerArgs,
-		env,
-		c.String("name"),
-		c.StringSlice("volume"),
-		portmap,
-		c.Bool("auto-restart"), // remain "running" up on docker daemon restart.
-	)
+	dockerID, err := createServer(clusterSpec)
 	if err != nil {
 		deleteCluster()
 		return err
@@ -215,26 +215,14 @@ func CreateCluster(c *cli.Context) error {
 
 	// creating the specified worker nodes
 	if c.Int("workers") > 0 {
-		k3sWorkerArgs := []string{}
-		// appending the k3sClusterSecret and k3sToke to env variable
-		env := []string{k3sClusterSecret, k3sToken}
-		// passing the environment variables to the workers
-		env = append(env, c.StringSlice("env")...)
+		// k3sWorkerArgs := []string{}
+		// // appending the k3sClusterSecret and k3sToke to env variable
+		// env := []string{k3sClusterSecret, k3sToken}
+		// // passing the environment variables to the workers
+		// env = append(env, c.StringSlice("env")...)
 		log.Printf("Booting %s workers for cluster %s", strconv.Itoa(c.Int("workers")), c.String("name"))
 		for i := 0; i < c.Int("workers"); i++ {
-			workerID, err := createWorker(
-				c.GlobalBool("verbose"),
-				image,
-				k3sWorkerArgs,
-				env,
-				c.String("name"),
-				c.StringSlice("volume"),
-				i, //postfix
-				c.String("api-port"),
-				portmap, // All ports exposed by --publish will also be exported for all worker
-				c.Int("port-auto-offset"),
-				c.Bool("auto-restart"), // remain "running" up on docker daemon restart.
-			)
+			workerID, err := createWorker(clusterSpec, i)
 			if err != nil {
 				// if worker creation fails, delete the cluster and exit. Atomic creation
 				deleteCluster() // literal function
