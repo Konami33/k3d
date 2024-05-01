@@ -104,3 +104,4 @@ func shell(cluster string, shell string, command string) error {
 
 	return cmd.Run()
 }
+

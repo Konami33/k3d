@@ -30,6 +30,9 @@ func mapNodesToPortSpecs(specs []string, createdNodes []string) (map[string][]st
 		return nil, err
 	}
 
+	// fmt.Println("List of created nodes:")
+	// fmt.Println(createdNodes)
+
 	// check node-specifier possibilitites
 	possibleNodeSpecifiers := []string{"all", "workers", "server", "master"}
 	possibleNodeSpecifiers = append(possibleNodeSpecifiers, createdNodes...)
