@@ -16,7 +16,7 @@ import (
 
 type ClusterSpec struct {
 	AgentArgs         []string
-	ApiPort           string
+	ApiPort           apiPort
 	AutoRestart       bool
 	ClusterName       string
 	Env               []string
@@ -92,7 +92,7 @@ func createServer(spec *ClusterSpec) (string, error) {
 	}
 
 	//problem
-	apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", spec.ApiPort, spec.ApiPort)
+	apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", spec.ApiPort.Port, spec.ApiPort.Port)
 	
 	serverPorts = append(serverPorts, apiPortSpec)
 	serverPublishedPorts, err := CreatePublishedPorts(serverPorts)
@@ -161,7 +161,7 @@ func createWorker(spec *ClusterSpec, postfix int) (string, error) {
 	//containerName := fmt.Sprintf("k3d-%s-worker-%d", name, postfix)
 	containerName := GetContainerName("worker", spec.ClusterName, postfix)
 
-	spec.Env = append(spec.Env, fmt.Sprintf("K3S_URL=https://k3d-%s-server:%s", spec.ClusterName, spec.ApiPort))
+	spec.Env = append(spec.Env, fmt.Sprintf("K3S_URL=https://k3d-%s-server:%s", spec.ClusterName, spec.ApiPort.Port))
 
 	// k3d create --publish  80:80  --publish 90:90/udp --workers 1
 	// The exposed ports will be:

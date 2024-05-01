@@ -110,15 +110,36 @@ func CreateCluster(c *cli.Context) error {
 	}
 
 	// constructs the arguments to be passed to the k3s server
-	k3sServerArgs := []string{"--https-listen-port", c.String("api-port")}
+	// k3sServerArgs := []string{"--https-listen-port", c.String("api-port")}
 
-	// "--tls-san <docker machine IP>" to the K3S server argument list.
-	if ip, err := getDockerMachineIp(); ip != "" || err != nil {
-		if err != nil {
-			return err
+	// // "--tls-san <docker machine IP>" to the K3S server argument list.
+	// if ip, err := getDockerMachineIp(); ip != "" || err != nil {
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	log.Printf("Add TLS SAN for %s", ip)
+	// 	k3sServerArgs = append(k3sServerArgs, "--tls-san", ip)
+	// }
+
+	apiPort, err := parseApiPort(c.String("api-port"))
+	if err != nil {
+		return err
+	}
+
+	k3sServerArgs := []string{"--https-listen-port", apiPort.Port}
+
+	if apiPort.Host == "" {
+		if apiPort.Host, err = getDockerMachineIp(); apiPort.Host != "" || err != nil {
+			if err != nil {
+				return err
+			}
 		}
-		log.Printf("Add TLS SAN for %s", ip)
-		k3sServerArgs = append(k3sServerArgs, "--tls-san", ip)
+	}
+
+	if apiPort.Host != "" {
+		// Add TLS SAN for non default host name
+		log.Printf("Add TLS SAN for %s", apiPort.Host)
+		k3sServerArgs = append(k3sServerArgs, "--tls-san", apiPort.Host)
 	}
 
 	if c.IsSet("server-arg") || c.IsSet("x") {
@@ -132,7 +153,7 @@ func CreateCluster(c *cli.Context) error {
 
 	clusterSpec := &ClusterSpec{
 		AgentArgs:         []string{},
-		ApiPort:           c.String("api-port"),
+		ApiPort:           *apiPort,
 		AutoRestart:       c.Bool("auto-restart"),
 		ClusterName:       c.String("name"),
 		Env:               env,
