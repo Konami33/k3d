@@ -100,7 +100,7 @@ func subShell(cluster string, shell string, command string) error {
 	// "PS1=\[%s}%s": Format of the string. Sets PS1 to a custom value. The \[ and \] are escape sequences in Bash that denote non-printing characters, which is often used for colorizing the prompt.
 	// The resulting prompt will display the cluster name alongside the existing prompt string.
 	// see more: https://linuxsimply.com/bash-scripting-tutorial/variables/types/ps1/
-	setPrompt := fmt.Sprintf("%s=[%s} %s", shells[shell].Prompt, cluster, shells[shell].Prompt)
+	setPrompt := fmt.Sprintf("%s=[%s} %s", shells[shell].Prompt, cluster, os.Getenv(shells[shell].Prompt))
 
 	// Set up KUBECONFIG
 	setKube := fmt.Sprintf("KUBECONFIG=%s", kubeConfigPath)

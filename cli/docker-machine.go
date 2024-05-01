@@ -22,7 +22,7 @@ func getDockerMachineIp() (string, error) {
 
 	// Command returns the Cmd struct to execute the named program with the given arguments.
 	// Output runs the command and returns its standard output.
-	out, err := exec.Command(dockerMachinePath, "ip").Output()
+	out, err := exec.Command(dockerMachinePath, "ip", machine).Output()
 
 	//TrimSuffix returns s without the provided trailing suffix string. If s doesn't end with suffix, s is returned unchanged.
 	ipStr := strings.TrimSuffix(string(out), "\n")

@@ -115,6 +115,16 @@ func CreateCluster(c *cli.Context) error {
 
 	// constructs the arguments to be passed to the k3s server
 	k3sServerArgs := []string{"--https-listen-port", c.String("api-port")}
+
+	// "--tls-san <docker machine IP>" to the K3S server argument list.
+	if ip, err := getDockerMachineIp(); ip != "" || err != nil {
+		if err != nil {
+			return err
+		}
+		log.Printf("Add TLS SAN for %s", ip)
+		k3sServerArgs = append(k3sServerArgs, "--tls-san", ip)
+	}
+
 	if c.IsSet("server-arg") || c.IsSet("x") {
 		k3sServerArgs = append(k3sServerArgs, c.StringSlice("server-arg")...)
 	}
