@@ -114,7 +114,7 @@ func createServer(verbose bool, image string, apiPort string, args []string, env
 	//networkingConfig
 	networkingConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			name: {
+			k3dNetworkName(name): {
 				Aliases: []string{containerName},
 			},
 		},
@@ -202,7 +202,7 @@ func createWorker(verbose bool, image string, args []string, env []string, name 
 
 	networkingConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			name: {
+			k3dNetworkName(name): {
 				Aliases: []string{containerName},
 			},
 		},

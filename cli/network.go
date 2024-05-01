@@ -10,6 +10,10 @@ import (
 	"github.com/docker/docker/api/types"
 	dockerClient "github.com/docker/docker/client"
 )
+//add k3d prefix to every container name
+func k3dNetworkName(clusterName string) string {
+	return fmt.Sprintf("k3d-%s", clusterName)
+}
 
 func createClusterNetwork(clusterName string) (string, error) {
 	ctx := context.Background()
@@ -39,7 +43,7 @@ func createClusterNetwork(clusterName string) (string, error) {
 	
 	// resp: containens the info about the newly created network, such as its ID, name, and configuration.
 	// create the network with a set of labels and the cluster name as network name
-	resp, err := docker.NetworkCreate(ctx, clusterName, types.NetworkCreate{
+	resp, err := docker.NetworkCreate(ctx, k3dNetworkName(clusterName), types.NetworkCreate{
 		// "app": "k3d": indicates that the network is associated with the "k3d" application.
 		// "cluster" : clusterName: indicates the name of the network
 		Labels: map[string]string{
