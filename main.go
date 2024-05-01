@@ -208,6 +208,22 @@ func main() {
 			},
 			Action: run.GetKubeConfig,
 		},
+		{
+			Name:  "import-image",
+			Usage: "Import a container image from your local docker daemon into the cluster",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "name, n",
+					Value: defaultK3sClusterName,
+					Usage: "Name of the cluster",
+				},
+				cli.StringFlag{
+					Name:  "image, i",
+					Usage: "Name of the image that you want to import, e.g. `nginx:local`",
+				},
+			},
+			Action: run.ImportImage,
+		},
 	}
 	// global flags. Used in commands.go getKubeconfig function
 	app.Flags = []cli.Flag{

@@ -109,20 +109,30 @@ func CreateCluster(c *cli.Context) error {
 		log.Println("INFO: As of v2.0.0 --port will be used for arbitrary port mapping. Please use --api-port/-a instead for configuring the Api Port")
 	}
 
-	apiPort, err := parseApiPort(c.String("api-port"))
+	apiPort, err := parseAPIPort(c.String("api-port"))
 	if err != nil {
 		return err
 	}
 
 	k3sServerArgs := []string{"--https-listen-port", apiPort.Port}
 
-	if apiPort.Host == "" {
-		if apiPort.Host, err = getDockerMachineIp(); err != nil {
-			return err
-		}
+	// see why docker client doesn't pay attention to DOCKER_MACHINE_NAME..
+	// 	It turns out that docker client only pays attention to the following
+	// 	environment variables:
+	// 	DOCKER_HOST to set the url to the docker server.
+	// 	DOCKER_API_VERSION to set the version of the API to reach, leave empty for latest.
+	// 	DOCKER_CERT_PATH to load the TLS certificates from.
+	// 	DOCKER_TLS_VERIFY to enable or disable TLS verification, off by default.
+	// 	A miss configured DOCKER_MACHINE_NAME won't affect docker client, so k3d
+	// 	should just ignore the error.
 
+	if apiPort.Host == "" {
+		apiPort.Host, err = getDockerMachineIp()
 		// IP address is the same as the host
-		apiPort.HostIp = apiPort.Host
+		apiPort.HostIP = apiPort.Host
+		if err != nil {
+			log.Printf("WARNING: Failed to get docker machine IP address, ignoring the DOCKER_MACHINE_NAME environment variable setting.\n")
+		}
 	}
 
 	if apiPort.Host != "" {
@@ -142,7 +152,7 @@ func CreateCluster(c *cli.Context) error {
 
 	clusterSpec := &ClusterSpec{
 		AgentArgs:         []string{},
-		ApiPort:           *apiPort,
+		APIPort:           *apiPort,
 		AutoRestart:       c.Bool("auto-restart"),
 		ClusterName:       c.String("name"),
 		Env:               env,
@@ -161,6 +171,9 @@ func CreateCluster(c *cli.Context) error {
 	// createServer creates a new server container
 	// dockerID is the ID of the container
 	// container.go -> createServer()
+
+	// create the directory where we will put the kubeconfig file by default (when running `k3d get-config`)
+	createClusterDir(c.String("name"))
 	dockerID, err := createServer(clusterSpec)
 	if err != nil {
 		deleteCluster()
@@ -215,8 +228,6 @@ func CreateCluster(c *cli.Context) error {
 		//delay for one second and try again
 		time.Sleep(1 * time.Second)
 	}
-	// creating a cluster directory
-	createClusterDir(c.String("name"))
 
 	// creating the specified worker nodes
 	if c.Int("workers") > 0 {
@@ -394,4 +405,9 @@ func GetKubeConfig(c *cli.Context) error {
 // Bash function
 func Shell(c *cli.Context) error {
 	return subShell(c.String("name"), c.String("shell"), c.String("command"))
+}
+
+// ImportImage saves an image locally and imports it into the k3d containers
+func ImportImage(c *cli.Context) error {
+	return importImage(c.String("name"), c.String("image"))
 }

@@ -11,7 +11,7 @@ import (
 
 type apiPort struct {
 	Host   string
-	HostIp string
+	HostIP string
 	Port   string
 }
 
@@ -110,7 +110,7 @@ func ValidateHostname(name string) error {
 }
 
 // usage: portSpec = localhost:8080
-func parseApiPort(portSpec string) (*apiPort, error) {
+func parseAPIPort(portSpec string) (*apiPort, error) {
 
 	var port *apiPort
 	split := strings.Split(portSpec, ":")
@@ -128,7 +128,7 @@ func parseApiPort(portSpec string) (*apiPort, error) {
 			return nil, err
 		}
 		// port: &{Host:localhost HostIp:127.0.0.1 Port:8080}
-		port = &apiPort{Host: split[0], HostIp: addrs[0], Port: split[1]}
+		port = &apiPort{Host: split[0], HostIP: addrs[0], Port: split[1]}
 	}
 
 	// Verify 'port' is an integer and within port ranges

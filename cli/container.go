@@ -16,7 +16,7 @@ import (
 
 type ClusterSpec struct {
 	AgentArgs         []string
-	ApiPort           apiPort
+	APIPort           apiPort
 	AutoRestart       bool
 	ClusterName       string
 	Env               []string
@@ -93,13 +93,13 @@ func createServer(spec *ClusterSpec) (string, error) {
 
 	//problem
 	//apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", spec.ApiPort.Port, spec.ApiPort.Port)
-	hostIp := "0.0.0.0"
+	hostIP := "0.0.0.0"
 	containerLabels["apihost"] = "localhost"
-	if spec.ApiPort.Host != "" {
-		hostIp = spec.ApiPort.HostIp
-		containerLabels["apihost"] = spec.ApiPort.Host
+	if spec.APIPort.Host != "" {
+		hostIP = spec.APIPort.HostIP
+		containerLabels["apihost"] = spec.APIPort.Host
 	}
-	apiPortSpec := fmt.Sprintf("%s:%s:%s/tcp", hostIp, spec.ApiPort.Port, spec.ApiPort.Port)
+	apiPortSpec := fmt.Sprintf("%s:%s:%s/tcp", hostIP, spec.APIPort.Port, spec.APIPort.Port)
 	
 	serverPorts = append(serverPorts, apiPortSpec)
 	serverPublishedPorts, err := CreatePublishedPorts(serverPorts)
@@ -125,6 +125,13 @@ func createServer(spec *ClusterSpec) (string, error) {
 	if len(spec.Volumes) > 0 && spec.Volumes[0] != "" {
 		hostConfig.Binds = spec.Volumes
 	}
+
+	// we need to mount the clusterDir subdirectory `clusterDir/images` to enable importing images without the need for `docker cp`
+	clusterDir, err := getClusterDir(spec.ClusterName)
+	if err != nil {
+		return "", fmt.Errorf("ERROR: couldn't get cluster dir for mounting\n%+v", err)
+	}
+	hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:/images", clusterDir+"/images"))
 
 	//networkingConfig
 	networkingConfig := &network.NetworkingConfig{
@@ -168,7 +175,7 @@ func createWorker(spec *ClusterSpec, postfix int) (string, error) {
 	//containerName := fmt.Sprintf("k3d-%s-worker-%d", name, postfix)
 	containerName := GetContainerName("worker", spec.ClusterName, postfix)
 
-	spec.Env = append(spec.Env, fmt.Sprintf("K3S_URL=https://k3d-%s-server:%s", spec.ClusterName, spec.ApiPort.Port))
+	spec.Env = append(spec.Env, fmt.Sprintf("K3S_URL=https://k3d-%s-server:%s", spec.ClusterName, spec.APIPort.Port))
 
 	// k3d create --publish  80:80  --publish 90:90/udp --workers 1
 	// The exposed ports will be:
@@ -214,6 +221,13 @@ func createWorker(spec *ClusterSpec, postfix int) (string, error) {
 	if len(spec.Volumes) > 0 && spec.Volumes[0] != "" {
 		hostConfig.Binds = spec.Volumes
 	}
+
+	// we need to mount the clusterDir subdirectory `clusterDir/images` to enable importing images without the need for `docker cp`
+	clusterDir, err := getClusterDir(spec.ClusterName)
+	if err != nil {
+		return "", fmt.Errorf("ERROR: couldn't get cluster dir for mounting\n%+v", err)
+	}
+	hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:/images", clusterDir+"/images"))
 
 	networkingConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
