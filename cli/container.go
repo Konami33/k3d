@@ -92,7 +92,14 @@ func createServer(spec *ClusterSpec) (string, error) {
 	}
 
 	//problem
-	apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", spec.ApiPort.Port, spec.ApiPort.Port)
+	//apiPortSpec := fmt.Sprintf("0.0.0.0:%s:%s/tcp", spec.ApiPort.Port, spec.ApiPort.Port)
+	hostIp := "0.0.0.0"
+	containerLabels["apihost"] = "localhost"
+	if spec.ApiPort.Host != "" {
+		hostIp = spec.ApiPort.HostIp
+		containerLabels["apihost"] = spec.ApiPort.Host
+	}
+	apiPortSpec := fmt.Sprintf("%s:%s:%s/tcp", hostIp, spec.ApiPort.Port, spec.ApiPort.Port)
 	
 	serverPorts = append(serverPorts, apiPortSpec)
 	serverPublishedPorts, err := CreatePublishedPorts(serverPorts)

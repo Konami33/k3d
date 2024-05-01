@@ -96,13 +96,7 @@ func main() {
 				},
 				//specify timeout time
 				cli.IntFlag{
-					Name:  "timeout, t",
-					Value: 0,
-					Usage: "Set the timeout value when --wait flag is set (deprecated, use --wait <timeout> instead)",
-				},
-				//--wait flag
-				cli.IntFlag{
-					Name:  "wait, w",
+					Name:  "wait, t",
 					Value: 0,
 					Usage: "Wait for the cluster to come up before returning until timoout (in seconds). Use --wait 0 to wait forever",
 				},
@@ -124,7 +118,7 @@ func main() {
 				},
 				//workder node
 				cli.IntFlag{
-					Name:  "workers",
+					Name:  "workers, w",
 					Value: 0,
 					Usage: "Specify how many worker nodes you want to spawn",
 				},

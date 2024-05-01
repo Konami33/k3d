@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+type apiPort struct {
+	Host   string
+	HostIp string
+	Port   string
+}
+
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 const clusterNameMaxSize int = 35
@@ -103,16 +109,10 @@ func ValidateHostname(name string) error {
 	return nil
 }
 
-type apiPort struct {
-	Host string
-	Port string
-}
-
+// usage: portSpec = localhost:8080
 func parseApiPort(portSpec string) (*apiPort, error) {
 
 	var port *apiPort
-	// 80:8080 --> {"80", "8080
-	// 80 --> {"80", ""}
 	split := strings.Split(portSpec, ":")
 	if len(split) > 2 {
 		return nil, fmt.Errorf("api-port format error")
@@ -123,11 +123,12 @@ func parseApiPort(portSpec string) (*apiPort, error) {
 	} else {
 		// Make sure 'host' can be resolved to an IP address
 		// LookupHost looks up the given host using the local resolver. It returns a slice of that host's addresses.
-		_, err := net.LookupHost(split[0])
+		addrs, err := net.LookupHost(split[0])
 		if err != nil {
 			return nil, err
 		}
-		port = &apiPort{Host: split[0], Port: split[1]}
+		// port: &{Host:localhost HostIp:127.0.0.1 Port:8080}
+		port = &apiPort{Host: split[0], HostIp: addrs[0], Port: split[1]}
 	}
 
 	// Verify 'port' is an integer and within port ranges

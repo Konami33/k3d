@@ -109,18 +109,6 @@ func CreateCluster(c *cli.Context) error {
 		log.Println("INFO: As of v2.0.0 --port will be used for arbitrary port mapping. Please use --api-port/-a instead for configuring the Api Port")
 	}
 
-	// constructs the arguments to be passed to the k3s server
-	// k3sServerArgs := []string{"--https-listen-port", c.String("api-port")}
-
-	// // "--tls-san <docker machine IP>" to the K3S server argument list.
-	// if ip, err := getDockerMachineIp(); ip != "" || err != nil {
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	log.Printf("Add TLS SAN for %s", ip)
-	// 	k3sServerArgs = append(k3sServerArgs, "--tls-san", ip)
-	// }
-
 	apiPort, err := parseApiPort(c.String("api-port"))
 	if err != nil {
 		return err
@@ -129,11 +117,12 @@ func CreateCluster(c *cli.Context) error {
 	k3sServerArgs := []string{"--https-listen-port", apiPort.Port}
 
 	if apiPort.Host == "" {
-		if apiPort.Host, err = getDockerMachineIp(); apiPort.Host != "" || err != nil {
-			if err != nil {
-				return err
-			}
+		if apiPort.Host, err = getDockerMachineIp(); err != nil {
+			return err
 		}
+
+		// IP address is the same as the host
+		apiPort.HostIp = apiPort.Host
 	}
 
 	if apiPort.Host != "" {
@@ -183,11 +172,6 @@ func CreateCluster(c *cli.Context) error {
 	docker, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv)
 	if err != nil {
 		return err
-	}
-
-	// check if --timeout flag is set. Log a message to show the deprecation
-	if c.IsSet("timeout") {
-		log.Println("[Warning] The --timeout flag is deprecated. use '--wait <timeout>' instead")
 	}
 
 	// wait for k3s to be up and running if we want it
