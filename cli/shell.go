@@ -6,22 +6,32 @@ import (
 	"os/exec"
 	"path"
 )
+type shell struct {
+	Name    string
+	Options []string
+	Prompt  string
+	Env     map[string]string
+}
 
-var shells = map[string]map[string][]string{
-	"bash": {
-		"options": []string{
+var shells = map[string]shell{
+	"bash" : {
+		Name: "bash",
+		Options: []string{
 			"--noprofile", // don't load .profile/.bash_profile
 			"--norc",      // don't load .bashrc
 		},
+		Prompt: "PS1",
 	},
-	"zsh": {
-		"options": []string{
+	"zsh" : {
+		Name: "zsh",
+		Options: []string{
 			"--no-rcs", // don't load .zshrc
 		},
+		Prompt: "PROMPT",
 	},
 }
 
-func shell(cluster string, shell string, command string) error {
+func subShell(cluster string, shell string, command string) error {
 
 	// check if the selected shell is supported
 	if shell == "auto" {
@@ -71,7 +81,7 @@ func shell(cluster string, shell string, command string) error {
 
 	// set shell specific options (command line flags)
 	// if shell == "bash" then shellOptions = --noprofile --norc
-	shellOptions := shells[shell]["options"]
+	shellOptions := shells[shell].Options
 	cmd := exec.Command(shellPath, shellOptions...)
 
 	if len(command) > 0 {
@@ -90,7 +100,7 @@ func shell(cluster string, shell string, command string) error {
 	// "PS1=\[%s}%s": Format of the string. Sets PS1 to a custom value. The \[ and \] are escape sequences in Bash that denote non-printing characters, which is often used for colorizing the prompt.
 	// The resulting prompt will display the cluster name alongside the existing prompt string.
 	// see more: https://linuxsimply.com/bash-scripting-tutorial/variables/types/ps1/
-	setPS1 := fmt.Sprintf("PS1=[%s}%s", cluster, os.Getenv("PS1"))
+	setPrompt := fmt.Sprintf("%s=[%s} %s", shells[shell].Prompt, cluster, os.Getenv("PS1"))
 
 	// Set up KUBECONFIG
 	setKube := fmt.Sprintf("KUBECONFIG=%s", kubeConfigPath)
@@ -98,7 +108,7 @@ func shell(cluster string, shell string, command string) error {
 	subShell = fmt.Sprintf("__K3D_CLUSTER__=%s", cluster)
 	// Environ returns a copy of strings representing the environment, in the form "key=value".
 	// adding the environment variables to the newEnv
-	newEnv := append(os.Environ(), setPS1, setKube, subShell)
+	newEnv := append(os.Environ(), setPrompt, setKube, subShell)
 	// Set up environment of the cmd
 	cmd.Env = newEnv
 
